@@ -1,26 +1,59 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * Fabric.js wraps the <canvas> it's given in its own ".canvas-container" div,
+ * sized in inline styles to match the canvas's pixel dimensions. Left alone,
+ * that div's intrinsic size can feed back into a flexbox ancestor that isn't
+ * fully height-constrained, shrinking the whole stage down to the canvas's
+ * own (possibly stale, pre-layout) size instead of filling the space laid
+ * out for it. Pinning it absolute over its (relatively positioned) parent
+ * breaks that feedback loop for good — the stage's size always comes purely
+ * from flex layout, and the canvas is resized to match afterward.
+ */
+.canvas-container {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/*
+ * Thin, theme-matching scrollbar for dark-UI scroll areas (thumbnail carousel,
+ * edit-tools pane, etc). The accent color defaults to blue and switches to
+ * purple via `data-accent="video"` on the element itself, so one class covers
+ * both the image- and video-mode editor without needing separate variants.
+ */
+.custom-scrollbar {
+  --scrollbar-thumb-hover: #3b82f6;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-hover) rgba(15, 23, 42, 0.5);
+}
+
+.custom-scrollbar[data-accent="video"] {
+  --scrollbar-thumb-hover: #a855f7;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(2, 6, 23, 0.5);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.6);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
