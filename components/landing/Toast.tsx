@@ -18,7 +18,7 @@ export default function Toast({ message }: ToastProps) {
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
             role="alert"
-            className="pointer-events-auto flex max-w-md items-start gap-3 rounded-xl border border-red-500/30 bg-[#1E293B] px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+            className="pointer-events-auto flex max-w-md items-start gap-3 rounded-xl border-2 border-red-500/30 bg-[#1E293B] px-4 py-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
           >
             <AlertTriangle size={18} className="mt-0.5 shrink-0 text-red-400" />
             <p className="text-sm leading-snug text-slate-200">{message}</p>

@@ -2,38 +2,65 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import Image from "next/image";
-import { ChevronsLeftRight, FileImage } from "lucide-react";
+import { animate, useInView, type AnimationPlaybackControlsWithThen } from "framer-motion";
+import { ChevronsLeftRight } from "lucide-react";
 
 const STEP = 4;
+/** Percent range (from each edge) within which a Before/After label starts fading as the handle nears it. */
+const LABEL_FADE_ZONE = 18;
+const LABEL_MIN_OPACITY = 0;
+/** Handle path for the one-shot auto-preview sweep: center -> near-before -> near-after -> center. */
+const SWEEP_KEYFRAMES = [50, 15, 85, 50];
+const SWEEP_DURATION = 2.5;
 
 export default function MediaCompareSlider({
   beforeSrc,
   afterSrc,
   beforeAlt,
   afterAlt,
-  fileLabel,
   aspectClassName = "aspect-[4/3]",
   checkerboardAfter = false,
-  accent = "cyan",
+  mediaKind = "image",
 }: {
   beforeSrc: string;
   afterSrc: string;
   beforeAlt: string;
   afterAlt: string;
-  fileLabel: string;
   aspectClassName?: string;
   checkerboardAfter?: boolean;
-  accent?: "cyan" | "purple";
+  mediaKind?: "image" | "video";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
+  const isHoveringRef = useRef(false);
+  const sweepControlsRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const [percent, setPercent] = useState(50);
+
+  const isInView = useInView(containerRef, { once: true, amount: 0.4 });
+
+  const stopSweep = useCallback(() => {
+    sweepControlsRef.current?.stop();
+    sweepControlsRef.current = null;
+  }, []);
+
+  // Auto-preview sweep: once the card first scrolls into view, demo the
+  // slider on its own — unless the user is already interacting with it.
+  useEffect(() => {
+    if (!isInView || isHoveringRef.current) return;
+    sweepControlsRef.current = animate(SWEEP_KEYFRAMES[0], SWEEP_KEYFRAMES, {
+      duration: SWEEP_DURATION,
+      ease: "easeInOut",
+      onUpdate: (latest) => setPercent(latest),
+    });
+    return () => sweepControlsRef.current?.stop();
+  }, [isInView]);
 
   const updateFromClientX = useCallback((clientX: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -44,16 +71,18 @@ export default function MediaCompareSlider({
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      stopSweep();
       isDraggingRef.current = true;
       event.currentTarget.setPointerCapture(event.pointerId);
       updateFromClientX(event.clientX);
     },
-    [updateFromClientX],
+    [stopSweep, updateFromClientX],
   );
 
   const handlePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!isDraggingRef.current) return;
+      // Mouse: scrub on hover, no click needed. Touch/pen: only while dragging.
+      if (!isDraggingRef.current && event.pointerType !== "mouse") return;
       updateFromClientX(event.clientX);
     },
     [updateFromClientX],
@@ -63,52 +92,59 @@ export default function MediaCompareSlider({
     isDraggingRef.current = false;
   }, []);
 
-  const handleKeyDown = useCallback((event: ReactKeyboardEvent) => {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      setPercent((value) => Math.max(0, value - STEP));
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      setPercent((value) => Math.min(100, value + STEP));
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      setPercent(0);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      setPercent(100);
-    }
+  const handleMouseEnter = useCallback(() => {
+    isHoveringRef.current = true;
+    stopSweep();
+  }, [stopSweep]);
+
+  const handleMouseLeave = useCallback(() => {
+    isHoveringRef.current = false;
   }, []);
 
-  const accentClasses =
-    accent === "purple"
-      ? {
-          badge: "border-purple-400/50 bg-slate-950/80 text-purple-300 shadow-[0_0_16px_rgba(168,85,247,0.35)]",
-          handle: "bg-purple-500 shadow-[0_0_24px_rgba(168,85,247,0.65)]",
-          glow: "shadow-[0_0_50px_rgba(168,85,247,0.12)]",
-        }
-      : {
-          badge: "border-cyan-400/50 bg-slate-950/80 text-cyan-300 shadow-[0_0_16px_rgba(34,211,238,0.35)]",
-          handle: "bg-cyan-500 shadow-[0_0_24px_rgba(34,211,238,0.65)]",
-          glow: "shadow-[0_0_50px_rgba(34,211,238,0.12)]",
-        };
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent) => {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        stopSweep();
+        setPercent((value) => Math.max(0, value - STEP));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        stopSweep();
+        setPercent((value) => Math.min(100, value + STEP));
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        stopSweep();
+        setPercent(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        stopSweep();
+        setPercent(100);
+      }
+    },
+    [stopSweep],
+  );
+
+  // Brand gradient (matches the logo mark and hero headline) — same on every slider, everywhere.
+  const accentClasses = {
+    badge: "border-[#0066FF]/50 bg-slate-950/80 text-[#5ec8ff] shadow-[0_0_16px_rgba(0,102,255,0.35)]",
+    handle: "bg-gradient-to-br from-[#0066FF] to-[#06B6D4] shadow-[0_0_24px_rgba(0,102,255,0.6)]",
+    glow: "shadow-[0_0_50px_rgba(0,102,255,0.12)]",
+  };
+
+  // Fade each label out as the handle sweeps close enough to overlap it.
+  const beforeLabelOpacity =
+    percent <= LABEL_FADE_ZONE
+      ? Math.max(LABEL_MIN_OPACITY, percent / LABEL_FADE_ZONE)
+      : 1;
+  const afterLabelOpacity =
+    percent >= 100 - LABEL_FADE_ZONE
+      ? Math.max(LABEL_MIN_OPACITY, (100 - percent) / LABEL_FADE_ZONE)
+      : 1;
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border border-white/10 bg-[#0B1320] ${accentClasses.glow}`}
+      className={`relative overflow-hidden rounded-2xl border-2 border-white/10 bg-[#0B1320] ${accentClasses.glow}`}
     >
-      {/* Titlebar */}
-      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-white/10 bg-[#0F172A]/90 px-4 font-mono text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-red-500/80" />
-          <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
-          <span className="h-3 w-3 rounded-full bg-green-500/80" />
-        </div>
-        <div className="flex min-w-0 items-center gap-1.5 text-slate-400">
-          <FileImage size={12} className="shrink-0 text-slate-500" />
-          <span className="truncate">{fileLabel}</span>
-        </div>
-      </div>
-
       {/* Interactive canvas */}
       <div
         ref={containerRef}
@@ -117,6 +153,8 @@ export default function MediaCompareSlider({
         onPointerUp={stopDragging}
         onPointerCancel={stopDragging}
         onPointerLeave={stopDragging}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={`relative w-full touch-none select-none overflow-hidden bg-[#0F172A] ${aspectClassName}`}
       >
         {checkerboardAfter && (
@@ -127,32 +165,60 @@ export default function MediaCompareSlider({
         )}
 
         {/* After — full layer underneath */}
-        <Image
-          src={afterSrc}
-          alt={afterAlt}
-          fill
-          sizes="(min-width: 1024px) 560px, 100vw"
-          className="pointer-events-none object-cover"
-          priority
-        />
-
-        {/* Before — clipped to the slider position */}
-        <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - percent}% 0 0)` }}>
+        {mediaKind === "video" ? (
+          <video
+            src={afterSrc}
+            aria-label={afterAlt}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
           <Image
-            src={beforeSrc}
-            alt={beforeAlt}
+            src={afterSrc}
+            alt={afterAlt}
             fill
             sizes="(min-width: 1024px) 560px, 100vw"
             className="pointer-events-none object-cover"
             priority
           />
+        )}
+
+        {/* Before — clipped to the slider position */}
+        <div className="absolute inset-0" style={{ clipPath: `inset(0 ${100 - percent}% 0 0)` }}>
+          {mediaKind === "video" ? (
+            <video
+              src={beforeSrc}
+              aria-label={beforeAlt}
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <Image
+              src={beforeSrc}
+              alt={beforeAlt}
+              fill
+              sizes="(min-width: 1024px) 560px, 100vw"
+              className="pointer-events-none object-cover"
+              priority
+            />
+          )}
         </div>
 
-        <span className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.4)]">
+        <span
+          className="pointer-events-none absolute left-3 top-3 rounded-full border-2 border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-opacity duration-150"
+          style={{ opacity: beforeLabelOpacity }}
+        >
           Before
         </span>
         <span
-          className={`pointer-events-none absolute right-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-md ${accentClasses.badge}`}
+          className={`pointer-events-none absolute right-3 top-3 rounded-full border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-md transition-opacity duration-150 ${accentClasses.badge}`}
+          style={{ opacity: afterLabelOpacity }}
         >
           After
         </span>
@@ -171,10 +237,10 @@ export default function MediaCompareSlider({
           tabIndex={0}
           onKeyDown={handleKeyDown}
           onPointerDown={handlePointerDown}
-          className={`absolute top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-white/20 text-slate-950 outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${accentClasses.handle}`}
+          className={`absolute top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border-2 border-white/20 text-white outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${accentClasses.handle}`}
           style={{ left: `${percent}%` }}
         >
-          <ChevronsLeftRight size={18} />
+          <ChevronsLeftRight size={26} strokeWidth={2.5} />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Divider, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import type { ReactNode } from "react";
 import { Grid3x3, Maximize, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 
@@ -9,96 +9,79 @@ export default function CanvasFloatingToolbar() {
     useCanvasEngine();
 
   return (
-    <Box
-      sx={{
-        position: "absolute",
-        left: "50%",
-        top: 16,
-        transform: "translateX(-50%)",
-        zIndex: 2,
-      }}
-    >
-      <Stack
-        direction="row"
-        spacing={0.5}
-        sx={{
-          alignItems: "center",
-          px: 1,
-          py: 0.5,
-          borderRadius: 2,
-          bgcolor: "background.paper",
-          border: "1px solid",
-          borderColor: "divider",
-          boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
-        }}
+    <div className="pointer-events-none absolute left-1/2 top-3 z-2 -translate-x-1/2">
+      <div
+        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-slate-700/60 bg-slate-900/85 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
+        // Renders inside the same container CanvasWorkspace's interaction
+        // hook listens on for pointerdown — without this, a button click's
+        // native pointerdown would bubble up, get hit-tested against
+        // whatever layer is selected, miss (this toolbar floats above the
+        // page, not necessarily over any layer), and deselect it.
+        onPointerDown={(event) => event.stopPropagation()}
       >
-        <Tooltip title="Undo">
-          <span>
-            <IconButton size="small" aria-label="Undo" onClick={undo} disabled={!canUndo}>
-              <Undo2 size={16} />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title="Redo">
-          <span>
-            <IconButton size="small" aria-label="Redo" onClick={redo} disabled={!canRedo}>
-              <Redo2 size={16} />
-            </IconButton>
-          </span>
-        </Tooltip>
+        <ToolbarIconButton label="Undo" onClick={undo} disabled={!canUndo}>
+          <Undo2 size={15} />
+        </ToolbarIconButton>
+        <ToolbarIconButton label="Redo" onClick={redo} disabled={!canRedo}>
+          <Redo2 size={15} />
+        </ToolbarIconButton>
 
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <span className="mx-0.5 h-4.5 w-px bg-slate-700/70" />
 
-        <Tooltip title="Zoom out">
-          <IconButton size="small" aria-label="Zoom out" onClick={zoomOut}>
-            <ZoomOut size={16} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Reset zoom to 100%">
-          <Typography
-            component="button"
-            onClick={resetView}
-            variant="caption"
-            sx={{
-              minWidth: 44,
-              textAlign: "center",
-              fontWeight: 600,
-              fontVariantNumeric: "tabular-nums",
-              color: "text.secondary",
-              bgcolor: "transparent",
-              border: "none",
-              cursor: "pointer",
-              "&:hover": { color: "text.primary" },
-            }}
-          >
-            {Math.round(zoom * 100)}%
-          </Typography>
-        </Tooltip>
-        <Tooltip title="Zoom in">
-          <IconButton size="small" aria-label="Zoom in" onClick={zoomIn}>
-            <ZoomIn size={16} />
-          </IconButton>
-        </Tooltip>
+        <ToolbarIconButton label="Zoom out" onClick={zoomOut}>
+          <ZoomOut size={15} />
+        </ToolbarIconButton>
+        <button
+          type="button"
+          title="Reset zoom to 100%"
+          onClick={resetView}
+          className="min-w-11 rounded-full px-1 text-center font-mono text-xs font-semibold tabular-nums text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <ToolbarIconButton label="Zoom in" onClick={zoomIn}>
+          <ZoomIn size={15} />
+        </ToolbarIconButton>
 
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <span className="mx-0.5 h-4.5 w-px bg-slate-700/70" />
 
-        <Tooltip title="Center canvas">
-          <IconButton size="small" aria-label="Center canvas" onClick={centerCanvas}>
-            <Maximize size={16} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={showGrid ? "Hide grid" : "Show grid"}>
-          <IconButton
-            size="small"
-            aria-label="Toggle composition grid"
-            aria-pressed={showGrid}
-            onClick={toggleGrid}
-            sx={{ color: showGrid ? "primary.main" : "text.secondary" }}
-          >
-            <Grid3x3 size={16} />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-    </Box>
+        <ToolbarIconButton label="Center canvas" onClick={centerCanvas}>
+          <Maximize size={15} />
+        </ToolbarIconButton>
+        <ToolbarIconButton label={showGrid ? "Hide grid" : "Show grid"} onClick={toggleGrid} active={showGrid}>
+          <Grid3x3 size={15} />
+        </ToolbarIconButton>
+      </div>
+    </div>
+  );
+}
+
+function ToolbarIconButton({
+  label,
+  onClick,
+  active,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+        active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

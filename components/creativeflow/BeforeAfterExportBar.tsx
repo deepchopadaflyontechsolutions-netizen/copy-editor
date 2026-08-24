@@ -1,155 +1,51 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
-import {
-  Box,
-  Button,
-  IconButton,
-  Menu,
-  Stack,
-  Switch,
-  ToggleButton,
-  ToggleButtonGroup,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import { Download, Redo2, Undo2 } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
-import type { ExportFormat } from "@/types/canvasEngine";
 
+// Undo/Redo and Export now live in EditorTopBar — this strip is just the
+// Before/After preview toggle, kept directly under the canvas. Before shows
+// the untouched original upload; After is the live, fully-edited document —
+// disabled while another exclusive canvas mode (crop/heal/Auto Clean) is
+// active, since the preview those modes rely on and this one would fight
+// over the same objects.
 export default function BeforeAfterExportBar() {
-  const { beforeAfter, toggleBeforeAfter, hasImage, exportImage, undo, redo, canUndo, canRedo } = useCanvasEngine();
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const [format, setFormat] = useState<ExportFormat>("png");
-  const [multiplier, setMultiplier] = useState(1);
-  const [isExporting, setIsExporting] = useState(false);
-
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      await exportImage({ format, multiplier });
-    } finally {
-      setIsExporting(false);
-      setAnchorEl(null);
-    }
-  };
+  const { beforeAfter, toggleBeforeAfter, hasImage, cropMode, healMode, autoCleanPreview } = useCanvasEngine();
+  const disabled = !hasImage || cropMode || healMode || autoCleanPreview;
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 2,
-        mt: 2,
-      }}
-    >
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-        <Typography
-          variant="body2"
-          sx={{ color: beforeAfter ? "primary.main" : "text.secondary", fontWeight: 600 }}
+    <div className="flex shrink-0 items-center justify-center px-4 py-2">
+      <div
+        role="group"
+        aria-label="Toggle before and after preview"
+        className="inline-flex items-center rounded-full border border-slate-700/70 bg-slate-900/70 p-1 shadow-inner shadow-black/20"
+      >
+        <button
+          type="button"
+          aria-pressed={beforeAfter}
+          disabled={disabled}
+          onClick={() => !beforeAfter && toggleBeforeAfter()}
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            beforeAfter
+              ? "bg-indigo-600 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]"
+              : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          }`}
         >
           Before
-        </Typography>
-        <Switch
-          checked={!beforeAfter}
-          onChange={toggleBeforeAfter}
-          disabled={!hasImage}
-          aria-label="Toggle before and after preview"
-        />
-        <Typography
-          variant="body2"
-          sx={{ color: !beforeAfter ? "primary.main" : "text.secondary", fontWeight: 600 }}
+        </button>
+        <button
+          type="button"
+          aria-pressed={!beforeAfter}
+          disabled={disabled}
+          onClick={() => beforeAfter && toggleBeforeAfter()}
+          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            !beforeAfter
+              ? "bg-indigo-600 text-white shadow-[0_0_10px_rgba(99,102,241,0.4)]"
+              : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          }`}
         >
           After
-        </Typography>
-      </Stack>
-
-      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
-        <Stack
-          direction="row"
-          sx={{
-            alignItems: "center",
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
-            overflow: "hidden",
-          }}
-        >
-          <Tooltip title="Undo">
-            <span>
-              <IconButton
-                aria-label="Undo"
-                onClick={undo}
-                disabled={!canUndo}
-                sx={{ borderRadius: 0, borderRight: "1px solid", borderColor: "divider" }}
-              >
-                <Undo2 size={18} />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <Tooltip title="Redo">
-            <span>
-              <IconButton aria-label="Redo" onClick={redo} disabled={!canRedo} sx={{ borderRadius: 0 }}>
-                <Redo2 size={18} />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Stack>
-
-        <Button
-          variant="contained"
-          color="primary"
-          aria-label="Export image"
-          startIcon={<Download size={16} />}
-          disabled={!hasImage}
-          onClick={(event: MouseEvent<HTMLElement>) => setAnchorEl(event.currentTarget)}
-        >
-          Export
-        </Button>
-      </Stack>
-
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.5, minWidth: 220 }}>
-          <Stack spacing={0.5}>
-            <Typography variant="caption" color="text.secondary">
-              Format
-            </Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={format}
-              onChange={(_, value: ExportFormat | null) => value && setFormat(value)}
-            >
-              <ToggleButton value="png">PNG</ToggleButton>
-              <ToggleButton value="jpeg">JPEG</ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
-          <Stack spacing={0.5}>
-            <Typography variant="caption" color="text.secondary">
-              Size multiplier
-            </Typography>
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={multiplier}
-              onChange={(_, value: number | null) => value && setMultiplier(value)}
-            >
-              <ToggleButton value={1}>1x</ToggleButton>
-              <ToggleButton value={2}>2x</ToggleButton>
-              <ToggleButton value={4}>4x</ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => void handleExport()}
-            disabled={isExporting}
-          >
-            {isExporting ? "Exporting…" : "Download"}
-          </Button>
-        </Box>
-      </Menu>
-    </Box>
+        </button>
+      </div>
+    </div>
   );
 }

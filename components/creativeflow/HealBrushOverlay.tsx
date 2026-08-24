@@ -1,6 +1,5 @@
 "use client";
 
-import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
 import { Check, X } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 
@@ -13,46 +12,38 @@ export default function HealBrushOverlay() {
   const { cancelHealMode, applyHealMode, isAutoCleaning, hasHealStrokes } = useCanvasEngine();
 
   return (
-    <Box
-      sx={{
-        position: "absolute",
-        left: "50%",
-        bottom: 16,
-        transform: "translateX(-50%)",
-        zIndex: 2,
-      }}
-    >
-      <Stack
-        direction="row"
-        spacing={1.5}
-        sx={{
-          alignItems: "center",
-          px: 2,
-          py: 1.5,
-          borderRadius: 2,
-          bgcolor: "background.paper",
-          border: "1px solid",
-          borderColor: "divider",
-          boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
-        }}
+    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-2 flex justify-center">
+      <div
+        className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/90 px-4 py-2.5 shadow-lg shadow-black/30 backdrop-blur-md"
+        onPointerDown={(event) => event.stopPropagation()}
       >
-        <Typography variant="body2" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
+        <p className="whitespace-nowrap text-xs font-medium text-slate-300">
           {hasHealStrokes ? "Ready to remove painted area" : "Paint over the area to remove"}
-        </Typography>
+        </p>
 
-        <Button size="small" variant="text" startIcon={<X size={14} />} onClick={cancelHealMode} disabled={isAutoCleaning}>
+        <button
+          type="button"
+          onClick={cancelHealMode}
+          disabled={isAutoCleaning}
+          className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <X size={13} />
           Cancel
-        </Button>
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={isAutoCleaning ? <CircularProgress size={14} color="inherit" /> : <Check size={14} />}
+        </button>
+        <button
+          type="button"
           onClick={() => void applyHealMode()}
           disabled={isAutoCleaning || !hasHealStrokes}
+          className="flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
+          {isAutoCleaning ? (
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            <Check size={13} />
+          )}
           {isAutoCleaning ? "Cleaning…" : "Apply"}
-        </Button>
-      </Stack>
-    </Box>
+        </button>
+      </div>
+    </div>
   );
 }

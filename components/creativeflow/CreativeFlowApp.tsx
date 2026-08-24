@@ -6,28 +6,27 @@ import { CreativeFlowProvider } from "@/context/CreativeFlowContext";
 import { CanvasEngineProvider } from "@/context/CanvasEngineContext";
 import { loadAsset } from "@/lib/landing/assetStore";
 import type { EditIntentId } from "@/types/editIntent";
-import DesktopTopBar from "./DesktopTopBar";
-import DesktopCanvas from "./DesktopCanvas";
+import EditorTopBar from "./EditorTopBar";
+import EditorToolRow from "./EditorToolRow";
+import CanvasWorkspace from "./CanvasWorkspace";
+import BeforeAfterExportBar from "./BeforeAfterExportBar";
 import RightPanel from "./RightPanel";
 import MobileEditor from "./MobileEditor";
 
 function DesktopEditor() {
   return (
-    <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: "column",
-          flexGrow: 1,
-          minWidth: 0,
-        }}
-      >
-        <DesktopTopBar />
-        <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0, p: 3 }}>
-          <DesktopCanvas />
+    <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0, bgcolor: "#020617" }}>
+      <EditorTopBar />
+      <EditorToolRow />
+      <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
+          <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0, p: 3 }}>
+            <CanvasWorkspace />
+          </Box>
+          <BeforeAfterExportBar />
         </Box>
+        <RightPanel />
       </Box>
-      <RightPanel />
     </Box>
   );
 }

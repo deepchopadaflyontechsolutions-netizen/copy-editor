@@ -11,85 +11,61 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ActiveSelection,
-  Canvas,
-  Ellipse,
-  FabricImage,
-  Line,
-  PencilBrush,
-  Point,
-  filters as fabricFilters,
-  initFilterBackend,
-} from "fabric";
-import type { FabricObject } from "fabric";
-import {
-  BLEND_MODE_TO_COMPOSITE_OPERATION,
   type BlendModeKey,
   type DrawingTool,
   type ExportFormat,
   type FilterState,
   type LayerMeta,
+  type PendingUploadAsset,
 } from "@/types/canvasEngine";
 import type { CurvePoint } from "@/types/creativeflow";
 import type { EditIntentId } from "@/types/editIntent";
-import { curvePointsToColorMatrix, DEFAULT_CURVE_POINTS } from "@/lib/canvas/selectiveColorMatrix";
+import { DEFAULT_CURVE_POINTS } from "@/lib/canvas/selectiveColorMatrix";
+import { probeImageDimensions } from "@/lib/decodeImage";
 import {
   detectMarkFromElement,
-  featherAlphaMask,
   getElementNaturalSize,
   loadHtmlImage,
   reconstructMark,
-  reconstructManualMask,
   type CanvasImageElement,
   type DetectedMark,
-  type RegionRect,
 } from "@/lib/canvas/autoClean";
+import { exportScene } from "@/lib/canvasEngine/export";
+import { nativeToObject, toObject, toScreen } from "@/lib/canvasEngine/geometry";
+import { renderLayerThumbnail } from "@/lib/canvasEngine/render";
+import type { EngineLayer, HistorySnapshot, Point, Rect, Viewport } from "@/lib/canvasEngine/types";
+import { createSnapshot } from "@/lib/canvasEngine/history";
+import { clampZoom, easeOutCubic, zoomToPoint, ZOOM_STEP } from "@/lib/canvasEngine/viewport";
 import {
-  useCanvasCrop,
-  type CropPixelSize,
+  CROP_PRESETS,
+  commitCrop,
+  createCropSession,
+  fitCropRectToRatio,
+  stepCropHeight,
+  stepCropPan,
+  stepCropResize,
+  stepCropWidth,
+  stepCropX,
+  stepCropY,
+  type CropDragState,
+  type CropHandleKey,
   type CropPresetKey,
-  type CropScreenRect,
-} from "@/hooks/useCanvasCrop";
-
-type LayerObject = FabricObject & { layerId?: string; layerName?: string };
-
-interface HistoryEntrySnapshot {
-  id: string;
-  label: string;
-  data: Record<string, unknown>;
-  aspectRatio: number;
-}
+  type CropSessionState,
+} from "@/lib/canvasEngine/crop";
 
 const DEFAULT_FILTER_STATE: FilterState = {
   exposure: 50,
   contrast: 50,
+  saturation: 50,
   blendMode: "Normal",
   curvePoints: DEFAULT_CURVE_POINTS,
 };
 
-// Applies only to secondary layers dropped on top of an existing document —
-// they sit inset within the page instead of covering it edge to edge. The
-// base photo gets its own (smaller, fixed) inset from the canvas edge — see
-// MAX_CANVAS_INSET / applyBaseImageFit — so this is purely about the extra
-// margin secondary layers get relative to the base photo's own frame.
-const IMAGE_FIT_PADDING = 0.8;
-// Breathing room between the photo's edge and the canvas edge, so resize/
-// crop handles sitting right on the image boundary have room to render and
-// to be grabbed with the mouse instead of overlapping the card border.
-const MAX_CANVAS_INSET = 48;
-// Translucent highlight for heal-brush strokes — deliberately distinct from
-// any real paint color so a mask-in-progress always reads as "marked for
-// removal" rather than as an actual brush stroke being added to the photo.
-const HEAL_BRUSH_COLOR = "rgba(248, 113, 113, 0.55)";
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 4;
-const ZOOM_STEP = 1.2;
-function clampZoom(value: number): number {
-  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
-}
-// Placeholder page shape before any photo has set the document's real aspect
-// ratio (empty canvas, or every layer deleted).
 const DEFAULT_DOCUMENT_ASPECT_RATIO = 4 / 3;
+const IMAGE_FIT_PADDING = 0.8;
+const LOGO_MAX_FRACTION = 0.3;
+const LOGO_MARGIN = 16;
+const NOTICE_DURATION_MS = 2400;
 
 let layerIdCounter = 0;
 function nextLayerId(): string {
@@ -97,38 +73,58 @@ function nextLayerId(): string {
   return `layer-${layerIdCounter}-${Date.now()}`;
 }
 
-function mapUiRangeToFabricRange(value: number): number {
-  return (value - 50) / 50;
+function loadImageElement(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to decode image"));
+    img.src = dataUrl;
+  });
 }
 
-function buildFabricFilters(state: FilterState) {
-  return [
-    new fabricFilters.Brightness({ brightness: mapUiRangeToFabricRange(state.exposure) }),
-    new fabricFilters.Contrast({ contrast: mapUiRangeToFabricRange(state.contrast) }),
-    new fabricFilters.ColorMatrix({ matrix: curvePointsToColorMatrix(state.curvePoints) as never }),
-  ];
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 interface CanvasEngineContextValue {
-  registerCanvas: (canvas: Canvas) => void;
-  unregisterCanvas: () => void;
   notifyContainerResize: (width: number, height: number) => void;
 
   hasImage: boolean;
   isImageLoading: boolean;
   documentSize: { width: number; height: number };
   layers: LayerMeta[];
+  engineLayers: EngineLayer[];
   activeLayerId: string | null;
+  activeLayerIsBase: boolean;
   selectLayer: (id: string) => void;
+  deselectLayer: () => void;
   toggleLayerVisibility: (id: string) => void;
   deleteLayer: (id: string) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
+  duplicateLayer: (id: string) => void;
+  toggleLayerLock: (id: string) => void;
+  updateLayerTransform: (id: string, transform: EngineLayer["transform"]) => void;
 
   loadImageFromFile: (file: File) => Promise<void>;
+  addImageLayer: (file: File) => Promise<void>;
+  addTextWatermark: (text: string) => void;
+  resizeDocument: (widthPx: number, heightPx: number) => void;
+  getLayerThumbnail: (id: string) => string | null;
+
+  pendingAssets: PendingUploadAsset[];
+  addPendingAsset: (file: File) => void;
+  placePendingAsset: (id: string) => Promise<void>;
+  removePendingAsset: (id: string) => void;
 
   isAutoCleaning: boolean;
   autoCleanPreview: boolean;
   autoCleanMessage: string | null;
+  autoCleanEllipsePreview: { cx: number; cy: number; rx: number; ry: number } | null;
   startAutoClean: () => void;
   applyAutoClean: () => Promise<void>;
   cancelAutoClean: () => void;
@@ -142,11 +138,15 @@ interface CanvasEngineContextValue {
   activeFilterState: FilterState;
   setExposure: (value: number) => void;
   setContrast: (value: number) => void;
+  setSaturation: (value: number) => void;
   setBlendMode: (mode: BlendModeKey) => void;
   setCurvePoint: (index: number, point: CurvePoint) => void;
   commitHistorySnapshot: () => void;
 
-  history: HistoryEntrySnapshot[];
+  activeLayerOpacity: number;
+  setOpacity: (value: number) => void;
+
+  history: HistorySnapshot[];
   historyIndex: number;
   jumpToHistory: (index: number) => void;
   undo: () => void;
@@ -158,17 +158,29 @@ interface CanvasEngineContextValue {
   enterCropMode: () => void;
   cancelCropMode: () => void;
   applyCrop: () => void;
-  cropPixelSize: CropPixelSize;
+  resetCrop: () => void;
+  cropRect: Rect | null;
+  cropImageBox: Rect | null;
+  cropLayerId: string | null;
+  cropPixelSize: { width: number; height: number };
+  cropOffsetPx: { x: number; y: number };
   cropAspectLocked: boolean;
   setCropAspectLocked: (locked: boolean) => void;
   cropPreset: CropPresetKey;
   applyCropPreset: (preset: CropPresetKey) => void;
   setCropWidthPx: (nativeWidth: number) => void;
   setCropHeightPx: (nativeHeight: number) => void;
-  cropBadgeRect: CropScreenRect | null;
+  setCropXPx: (nativeX: number) => void;
+  setCropYPx: (nativeY: number) => void;
+  cropBadgeRect: { left: number; top: number; width: number; height: number } | null;
+  beginCropHandleDrag: (handle: CropHandleKey) => void;
+  beginCropBodyDrag: (screenPoint: Point) => void;
+  updateCropDrag: (screenPoint: Point) => void;
+  endCropDrag: () => void;
 
   beforeAfter: boolean;
   toggleBeforeAfter: () => void;
+  beforeAfterBitmap: HTMLImageElement | null;
 
   exportImage: (options: { format: ExportFormat; multiplier: number }) => Promise<void>;
 
@@ -179,6 +191,8 @@ interface CanvasEngineContextValue {
   brushWidth: number;
   setBrushWidth: (width: number) => void;
 
+  viewport: Viewport;
+  setViewport: (viewport: Viewport) => void;
   zoom: number;
   setZoom: (value: number) => void;
   zoomIn: () => void;
@@ -188,509 +202,385 @@ interface CanvasEngineContextValue {
 
   showGrid: boolean;
   toggleGrid: () => void;
+
+  notice: string | null;
 }
 
 const CanvasEngineContext = createContext<CanvasEngineContextValue | undefined>(undefined);
 
 interface CanvasEngineProviderProps {
   children: ReactNode;
-  /** An image handed off from the landing page's uploader, auto-loaded once a canvas registers. */
   initialImageFile?: File | null;
-  /** The edit-mode intent chosen alongside initialImageFile — activates the matching tool once it's loaded. */
   initialTool?: EditIntentId | null;
 }
 
 export function CanvasEngineProvider({ children, initialImageFile = null, initialTool = null }: CanvasEngineProviderProps) {
-  const canvasRef = useRef<Canvas | null>(null);
-  const layerObjectsRef = useRef<Map<string, LayerObject>>(new Map());
-  const historyIndexRef = useRef(-1);
-  const isRestoringRef = useRef(false);
-
-  // The document's shape is driven by its base photo, not by whatever space
-  // happens to be available — these track that independently of React state
-  // so resize/undo/crop can all recompute the same way without re-render churn.
-  const baseImageLayerIdRef = useRef<string | null>(null);
+  const baseLayerIdRef = useRef<string | null>(null);
   const documentAspectRatioRef = useRef(DEFAULT_DOCUMENT_ASPECT_RATIO);
   const availableSizeRef = useRef({ width: 0, height: 0 });
+  const originalBaseImageDataUrlRef = useRef<string | null>(null);
+  const beforeHiddenIdsRef = useRef<Set<string>>(new Set());
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCleanMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCleanMarkRef = useRef<DetectedMark | null>(null);
+  const zoomAnimationRef = useRef<number | null>(null);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const pendingAssetsRef = useRef<PendingUploadAsset[]>([]);
+  const activeLayerIdRef = useRef<string | null>(null);
 
+  const [layers, setLayers] = useState<EngineLayer[]>([]);
+  const [activeLayerId, setActiveLayerIdState] = useState<string | null>(null);
+  // Mirrors baseLayerIdRef into real state — the ref is authoritative for
+  // callbacks/effects, but `activeLayerIsBase` below is computed during
+  // render, and reading a ref's .current there isn't safe to rely on.
+  const [baseLayerId, setBaseLayerIdState] = useState<string | null>(null);
   const [hasImage, setHasImage] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(false);
-  const [isAutoCleaning, setIsAutoCleaning] = useState(false);
-  const [autoCleanPreview, setAutoCleanPreview] = useState(false);
-  const [autoCleanMessage, setAutoCleanMessage] = useState<string | null>(null);
-  // The confidence-gated detection result (native image pixel coordinates)
-  // that's currently being previewed — applyAutoClean reconstructs exactly
-  // this mask, never a freshly recomputed one, so what the user approved is
-  // what gets applied.
-  const autoCleanMarkRef = useRef<DetectedMark | null>(null);
-  // The dashed preview ellipse added directly to the Fabric canvas while
-  // previewing — a real Fabric object (not an HTML overlay) so it pans/zooms
-  // with the canvas for free.
-  const autoCleanOverlayRef = useRef<Ellipse | null>(null);
-  const autoCleanMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [healMode, setHealMode] = useState(false);
-  const [hasHealStrokes, setHasHealStrokes] = useState(false);
-  // Mirrors healMode for the path:created canvas event handler, which is
-  // registered once in registerCanvas and would otherwise close over a
-  // stale healMode value (same reason drawingToolRef exists below).
-  const healModeRef = useRef(false);
-  // Live-preview brush strokes (translucent highlight paths) the user has
-  // painted this heal session — kept off the real layer stack and never
-  // committed as objects; applyHealMode rasterizes them into a mask instead.
-  const healPathsRef = useRef<LayerObject[]>([]);
-  // The actual pixel size the canvas was just resized to — mirrored into
-  // state (rather than left as a ref) so CanvasStage can size its card
-  // wrapper to match exactly. Fabric wraps the <canvas> in its own
-  // out-of-flow container element, so the wrapper can't just shrink to fit
-  // it via CSS; it needs this value explicitly.
   const [documentSize, setDocumentSize] = useState({ width: 0, height: 0 });
-  const [layers, setLayers] = useState<LayerMeta[]>([]);
-  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
-  const activeLayerIdRef = useRef<string | null>(null);
-  // Mirrors layerObjectsRef's lookup for the active layer into real state —
-  // useCanvasCrop (and anything else reading it during render) needs the
-  // current Fabric object, and reading a ref's .current during render isn't
-  // safe to rely on for that.
-  const [activeLayerObject, setActiveLayerObjectState] = useState<LayerObject | null>(null);
-  // Registered canvas instance mirrored into state for the same reason —
-  // canvasRef.current is still used everywhere else (event handlers,
-  // imperative callbacks), where reading a ref is fine.
-  const [registeredCanvas, setRegisteredCanvas] = useState<Canvas | null>(null);
-  const [filterStateByLayer, setFilterStateByLayer] = useState<Record<string, FilterState>>({});
-  const [history, setHistory] = useState<HistoryEntrySnapshot[]>([]);
+  const [pendingAssets, setPendingAssets] = useState<PendingUploadAsset[]>([]);
+  const [history, setHistory] = useState<HistorySnapshot[]>([]);
   const [historyIndex, setHistoryIndexState] = useState(-1);
-  const [cropMode, setCropMode] = useState(false);
-  const [beforeAfter, setBeforeAfter] = useState(false);
+  const [viewport, setViewportState] = useState<Viewport>({ zoom: 1, panX: 0, panY: 0 });
+  const [showGrid, setShowGrid] = useState(false);
   const [drawingTool, setDrawingToolState] = useState<DrawingTool>("selection");
   const [brushColor, setBrushColor] = useState("#007BFF");
   const [brushWidth, setBrushWidth] = useState(8);
-  const drawingToolRef = useRef<DrawingTool>("selection");
-  const [zoom, setZoomState] = useState(1);
-  const [showGrid, setShowGrid] = useState(false);
-  const compositionGridRef = useRef<Line[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const setActiveLayer = useCallback((id: string | null, obj: LayerObject | null) => {
-    activeLayerIdRef.current = id;
-    setActiveLayerId(id);
-    setActiveLayerObjectState(obj);
-  }, []);
+  const [isAutoCleaning, setIsAutoCleaning] = useState(false);
+  const [autoCleanPreview, setAutoCleanPreview] = useState(false);
+  const [autoCleanMessage, setAutoCleanMessage] = useState<string | null>(null);
+  const [autoCleanEllipsePreview, setAutoCleanEllipsePreview] = useState<{ cx: number; cy: number; rx: number; ry: number } | null>(null);
 
-  const syncLayers = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const objects = canvas.getObjects() as LayerObject[];
-    layerObjectsRef.current = new Map(
-      objects
-        .filter((obj) => Boolean(obj.layerId))
-        .map((obj) => [obj.layerId as string, obj]),
-    );
-    setLayers(
-      objects
-        .filter((obj): obj is LayerObject & { layerId: string } => Boolean(obj.layerId))
-        .map((obj) => ({
-          id: obj.layerId,
-          name: obj.layerName ?? obj.type ?? "Layer",
-          type: obj.type ?? "object",
-          visible: obj.visible !== false,
-        })),
-    );
-  }, []);
+  const [beforeAfter, setBeforeAfter] = useState(false);
+  const [beforeAfterBitmap, setBeforeAfterBitmap] = useState<HTMLImageElement | null>(null);
 
-  // The base photo sits inset from the canvas edge on all four sides (see
-  // fitCanvasToDocument) rather than filling it exactly — flush edges meant
-  // the image's own selection handles and the crop box's edge/corner handles
-  // rendered right on top of the card's border, with no room to see or grab
-  // them cleanly. Re-applied after every resize, crop, and history jump so
-  // the inset never drifts out of sync with the canvas.
-  const applyBaseImageFit = useCallback((canvas: Canvas, imageWidth: number, imageHeight: number, inset: number) => {
-    const baseId = baseImageLayerIdRef.current;
-    const baseObj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
-    if (!(baseObj instanceof FabricImage) || !baseObj.width || !baseObj.height) return;
-    // Scale each axis independently (rather than one uniform factor) so
-    // flooring the fit size never leaves a stray sliver of card color along
-    // one edge — width and height each land exactly on the inset bounds.
-    baseObj.set({
-      scaleX: imageWidth / baseObj.width,
-      scaleY: imageHeight / baseObj.height,
-      left: inset,
-      top: inset,
-    });
-    baseObj.setCoords();
-  }, []);
+  useEffect(() => {
+    pendingAssetsRef.current = pendingAssets;
+  }, [pendingAssets]);
+  useEffect(() => {
+    activeLayerIdRef.current = activeLayerId;
+  }, [activeLayerId]);
 
-  // Resizes the document (canvas) to the largest box that fits the last-known
-  // available space at the document's own aspect ratio, insets the photo
-  // within it by a margin (scaled down on very small viewports so it never
-  // eats an outsized share of the available space), then re-fits the base
-  // photo to that inset box. This is the single source of truth for canvas
-  // size — called on container resize, image load, crop, and history jumps.
-  const fitCanvasToDocument = useCallback(() => {
-    const canvas = canvasRef.current;
-    const { width: availableWidth, height: availableHeight } = availableSizeRef.current;
-    if (!canvas || availableWidth <= 0 || availableHeight <= 0) return;
-
-    const inset = Math.max(16, Math.min(MAX_CANVAS_INSET, Math.floor(Math.min(availableWidth, availableHeight) * 0.06)));
-    const aspectRatio = documentAspectRatioRef.current;
-    const innerAvailableWidth = Math.max(1, availableWidth - inset * 2);
-    const innerAvailableHeight = Math.max(1, availableHeight - inset * 2);
-
-    let imageWidth = innerAvailableWidth;
-    let imageHeight = imageWidth / aspectRatio;
-    if (imageHeight > innerAvailableHeight) {
-      imageHeight = innerAvailableHeight;
-      imageWidth = imageHeight * aspectRatio;
-    }
-    imageWidth = Math.max(1, Math.floor(imageWidth));
-    imageHeight = Math.max(1, Math.floor(imageHeight));
-
-    const width = imageWidth + inset * 2;
-    const height = imageHeight + inset * 2;
-
-    canvas.setDimensions({ width, height });
-    applyBaseImageFit(canvas, imageWidth, imageHeight, inset);
-    canvas.requestRenderAll();
-    setDocumentSize({ width, height });
-  }, [applyBaseImageFit]);
-
-  const notifyContainerResize = useCallback(
-    (width: number, height: number) => {
-      availableSizeRef.current = { width, height };
-      fitCanvasToDocument();
-    },
-    [fitCanvasToDocument],
-  );
-
-  const commitHistorySnapshot = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || isRestoringRef.current) return;
-    const data = canvas.toObject(["layerId", "layerName"]) as Record<string, unknown>;
-    setHistory((prev) => {
-      const truncated = prev.slice(0, historyIndexRef.current + 1);
-      const nextIndex = truncated.length;
-      const entry: HistoryEntrySnapshot = {
-        id: `undo-${nextIndex}-${Date.now()}`,
-        label: `Undo ${nextIndex + 1}`,
-        data,
-        aspectRatio: documentAspectRatioRef.current,
-      };
-      const next = [...truncated, entry];
-      historyIndexRef.current = next.length - 1;
-      setHistoryIndexState(historyIndexRef.current);
-      return next;
-    });
-  }, []);
-
-  const applyFiltersForLayer = useCallback((id: string, state: FilterState) => {
-    const obj = layerObjectsRef.current.get(id);
-    if (!obj || !(obj instanceof FabricImage)) return;
-    obj.filters = buildFabricFilters(state);
-    obj.globalCompositeOperation = BLEND_MODE_TO_COMPOSITE_OPERATION[state.blendMode];
-    obj.applyFilters();
-    canvasRef.current?.requestRenderAll();
-  }, []);
-
-  const registerCanvas = useCallback(
-    (canvas: Canvas) => {
-      canvasRef.current = canvas;
-      setRegisteredCanvas(canvas);
-      initFilterBackend();
-
-      canvas.on("object:added", syncLayers);
-      canvas.on("object:removed", syncLayers);
-      canvas.on("object:modified", () => {
-        syncLayers();
-        commitHistorySnapshot();
-      });
-      canvas.on("selection:created", (event) => {
-        const target = event.selected?.[0] as LayerObject | undefined;
-        if (target?.layerId) setActiveLayer(target.layerId, target);
-      });
-      canvas.on("selection:updated", (event) => {
-        const target = event.selected?.[0] as LayerObject | undefined;
-        if (target?.layerId) setActiveLayer(target.layerId, target);
-      });
-      // Pinch/ctrl+scroll zooms toward the cursor (matching Photoshop/Figma);
-      // plain scroll pans, matching a normal scrollable canvas.
-      canvas.on("mouse:wheel", (opt) => {
-        const evt = opt.e;
-        if (evt.ctrlKey || evt.metaKey) {
-          const nextZoom = clampZoom(canvas.getZoom() * 0.999 ** evt.deltaY);
-          canvas.zoomToPoint(new Point(evt.offsetX, evt.offsetY), nextZoom);
-          setZoomState(nextZoom);
-        } else {
-          canvas.relativePan(new Point(-evt.deltaX, -evt.deltaY));
-        }
-        evt.preventDefault();
-        evt.stopPropagation();
-      });
-
-      canvas.on("path:created", (event) => {
-        const path = event.path as LayerObject;
-        if (healModeRef.current) {
-          // Manual heal-brush stroke — kept only as a live-preview overlay,
-          // never committed as a real layer; applyHealMode() rasterizes
-          // these into a reconstruction mask instead.
-          path.set({ selectable: false, evented: false, excludeFromExport: true });
-          healPathsRef.current.push(path);
-          setHasHealStrokes(true);
-          canvas.requestRenderAll();
-          return;
-        }
-        if (drawingToolRef.current === "lasso") {
-          const pathBounds = path.getBoundingRect();
-          canvas.remove(path);
-          const hits = canvas.getObjects().filter((obj) => {
-            const b = obj.getBoundingRect();
-            const noOverlap =
-              b.left > pathBounds.left + pathBounds.width ||
-              b.left + b.width < pathBounds.left ||
-              b.top > pathBounds.top + pathBounds.height ||
-              b.top + b.height < pathBounds.top;
-            return !noOverlap;
-          });
-          if (hits.length === 1) {
-            canvas.setActiveObject(hits[0]);
-            const hit = hits[0] as LayerObject;
-            if (hit.layerId) setActiveLayer(hit.layerId, hit);
-          } else if (hits.length > 1) {
-            canvas.setActiveObject(new ActiveSelection(hits, { canvas }));
-          }
-          canvas.requestRenderAll();
-        } else {
-          const id = nextLayerId();
-          path.layerId = id;
-          path.layerName = `Brush ${layerObjectsRef.current.size + 1}`;
-          syncLayers();
-          commitHistorySnapshot();
-        }
-      });
-    },
-    [syncLayers, commitHistorySnapshot, setActiveLayer],
-  );
-
-  const applyDrawingMode = useCallback((tool: DrawingTool, color: string, width: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    if (tool === "selection") {
-      canvas.isDrawingMode = false;
-      return;
-    }
-    canvas.isDrawingMode = true;
-    const brush = new PencilBrush(canvas);
-    brush.color = color;
-    brush.width = width;
-    if (tool === "lasso") {
-      brush.strokeDashArray = [6, 4];
-    }
-    canvas.freeDrawingBrush = brush;
-  }, []);
-
-  const setDrawingTool = useCallback(
-    (tool: DrawingTool) => {
-      // Switching to a normal drawing tool mid heal-brush session discards
-      // any in-progress heal strokes (inlined rather than calling
-      // cancelHealMode, which is declared later in this file and would be a
-      // temporal-dead-zone dependency here).
-      if (healModeRef.current) {
-        const canvas = canvasRef.current;
-        healPathsRef.current.forEach((path) => canvas?.remove(path));
-        healPathsRef.current = [];
-        healModeRef.current = false;
-        setHealMode(false);
-        setHasHealStrokes(false);
-      }
-      drawingToolRef.current = tool;
-      setDrawingToolState(tool);
-      applyDrawingMode(tool, brushColor, brushWidth);
-    },
-    [applyDrawingMode, brushColor, brushWidth],
-  );
-
-  const handleSetBrushColor = useCallback(
-    (color: string) => {
-      setBrushColor(color);
-      // Heal mode's brush always uses its own fixed highlight color — the
-      // chosen paint color is still remembered in state for when the user
-      // returns to the real Brush tool, it just doesn't touch the live
-      // canvas brush while healing.
-      if (healModeRef.current) return;
-      applyDrawingMode(drawingToolRef.current, color, brushWidth);
-    },
-    [applyDrawingMode, brushWidth],
-  );
-
-  const handleSetBrushWidth = useCallback(
-    (width: number) => {
-      setBrushWidth(width);
-      // The width slider is shared with heal mode — swap in a freshly-built
-      // heal brush at the new width rather than routing through
-      // applyDrawingMode, which would reset the canvas back to the last
-      // selection/brush/lasso tool and drop the heal-highlight brush
-      // mid-session.
-      if (healModeRef.current) {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const brush = new PencilBrush(canvas);
-          brush.color = HEAL_BRUSH_COLOR;
-          brush.width = width;
-          canvas.freeDrawingBrush = brush;
-        }
-        return;
-      }
-      applyDrawingMode(drawingToolRef.current, brushColor, width);
-    },
-    [applyDrawingMode, brushColor],
-  );
-
-  const unregisterCanvas = useCallback(() => {
-    canvasRef.current = null;
-    setRegisteredCanvas(null);
-    layerObjectsRef.current = new Map();
-    historyIndexRef.current = -1;
-    baseImageLayerIdRef.current = null;
-    documentAspectRatioRef.current = DEFAULT_DOCUMENT_ASPECT_RATIO;
-    availableSizeRef.current = { width: 0, height: 0 };
-    setDocumentSize({ width: 0, height: 0 });
-    setHasImage(false);
-    setIsImageLoading(false);
-    setIsAutoCleaning(false);
-    setAutoCleanPreview(false);
-    setAutoCleanMessage(null);
-    autoCleanMarkRef.current = null;
-    autoCleanOverlayRef.current = null;
-    if (autoCleanMessageTimerRef.current) {
-      clearTimeout(autoCleanMessageTimerRef.current);
-      autoCleanMessageTimerRef.current = null;
-    }
-    healModeRef.current = false;
-    healPathsRef.current = [];
-    setHealMode(false);
-    setHasHealStrokes(false);
-    setLayers([]);
-    setActiveLayer(null, null);
-    setFilterStateByLayer({});
-    setHistory([]);
-    setHistoryIndexState(-1);
-    setCropMode(false);
-    setBeforeAfter(false);
-  }, [setActiveLayer]);
-
-  const loadImageFromFile = useCallback(
-    async (file: File) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      setIsImageLoading(true);
-      try {
-        // A data URL (rather than a blob: object URL) is used so the image
-        // src stays valid forever — history snapshots serialize this src
-        // string and re-fetch it on every undo/redo via loadFromJSON, and a
-        // revoked blob URL would silently break every jump to a snapshot
-        // taken before the revoke.
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-          reader.readAsDataURL(file);
-        });
-
-        const image = (await FabricImage.fromURL(dataUrl)) as LayerObject;
-        // Fabric objects default to center-origin coordinates, where left/top
-        // address the object's center rather than its top-left corner.
-        // Pinning to a top-left origin keeps this positioning math (and
-        // every other left/top read elsewhere — crop bounds, snapping, dim
-        // panels) in the corner-based coordinates the rest of this file
-        // assumes.
-        image.set({ originX: "left", originY: "top" });
-
-        const id = nextLayerId();
-        image.layerId = id;
-        image.layerName = `Layer ${layerObjectsRef.current.size + 1}`;
-
-        const isBaseImage = baseImageLayerIdRef.current === null;
-
-        if (isBaseImage) {
-          // The document's very first photo defines the page itself — the
-          // card is resized to this image's own aspect ratio and the image
-          // fills it exactly, instead of floating inside a generically
-          // shaped frame.
-          baseImageLayerIdRef.current = id;
-          documentAspectRatioRef.current = (image.width ?? 1) / (image.height ?? 1);
-          canvas.add(image);
-          fitCanvasToDocument();
-        } else {
-          // A second image dropped onto an existing document is an overlay,
-          // not a new page — it sits inset within the current canvas rather
-          // than resizing (or covering) the document underneath it.
-          const canvasWidth = canvas.getWidth();
-          const canvasHeight = canvas.getHeight();
-          const imageWidth = image.width ?? canvasWidth;
-          const imageHeight = image.height ?? canvasHeight;
-          const scale = Math.min(
-            (canvasWidth * IMAGE_FIT_PADDING) / imageWidth,
-            (canvasHeight * IMAGE_FIT_PADDING) / imageHeight,
-          );
-          image.scale(scale);
-          image.set({
-            left: (canvasWidth - image.getScaledWidth()) / 2,
-            top: (canvasHeight - image.getScaledHeight()) / 2,
-          });
-          canvas.add(image);
-        }
-
-        canvas.setActiveObject(image);
-        canvas.requestRenderAll();
-
-        setFilterStateByLayer((prev) => ({ ...prev, [id]: { ...DEFAULT_FILTER_STATE, curvePoints: DEFAULT_CURVE_POINTS } }));
-        setActiveLayer(id, image);
-        setHasImage(true);
-        commitHistorySnapshot();
-      } finally {
-        setIsImageLoading(false);
-      }
-    },
-    [commitHistorySnapshot, fitCanvasToDocument, setActiveLayer],
-  );
-
-  // Removes any active Auto Clean preview overlay/state without applying it.
-  const cancelAutoClean = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (autoCleanOverlayRef.current) {
-      canvas?.remove(autoCleanOverlayRef.current);
-      autoCleanOverlayRef.current = null;
-    }
-    autoCleanMarkRef.current = null;
-    setAutoCleanPreview(false);
-    canvas?.requestRenderAll();
+  const showNotice = useCallback((message: string) => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    setNotice(message);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), NOTICE_DURATION_MS);
   }, []);
 
   const showAutoCleanMessage = useCallback((message: string) => {
     if (autoCleanMessageTimerRef.current) clearTimeout(autoCleanMessageTimerRef.current);
     setAutoCleanMessage(message);
-    autoCleanMessageTimerRef.current = setTimeout(() => setAutoCleanMessage(null), 2600);
+    autoCleanMessageTimerRef.current = setTimeout(() => setAutoCleanMessage(null), NOTICE_DURATION_MS);
   }, []);
 
-  // Phase 1 — locates the small watermark/logo mark that tends to sit in a
-  // photo's bottom-right corner (see lib/canvas/autoClean.ts) and shows it
-  // as a dashed preview overlay for the user to confirm; nothing about the
-  // image itself changes yet. Always targets the base photo (matching
-  // exportImage's own notion of "the image"), not whatever layer happens to
-  // be selected. If nothing confident enough is found, surfaces a message
-  // instead of guessing at a larger area.
-  const startAutoClean = useCallback(() => {
-    const canvas = canvasRef.current;
-    const baseId = baseImageLayerIdRef.current;
-    const obj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
-    if (!canvas || !obj || !(obj instanceof FabricImage) || cropMode || autoCleanPreview || isAutoCleaning || healMode)
-      return;
+  const fitDocument = useCallback(() => {
+    const { width: availW, height: availH } = availableSizeRef.current;
+    if (availW <= 0 || availH <= 0) return { width: documentSize.width, height: documentSize.height };
 
-    // Reads from the untouched original element (rather than getElement(),
-    // which returns the already-filtered element when exposure/contrast/
-    // curve filters are active) so detection isn't thrown off by those
-    // filters, and so applyAutoClean's setElement() re-applies them exactly
-    // once.
-    const sourceElement = obj._originalElement as CanvasImageElement;
+    const innerW = availW;
+    const innerH = availH;
+    const ratio = documentAspectRatioRef.current;
+
+    let w = innerW;
+    let h = w / ratio;
+    if (h > innerH) {
+      h = innerH;
+      w = h * ratio;
+    }
+    const next = { width: Math.max(1, Math.floor(w)), height: Math.max(1, Math.floor(h)) };
+    setDocumentSize(next);
+    return next;
+    // documentSize itself is intentionally not a dependency — this recomputes
+    // it, so depending on it would just describe its own staleness.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Deliberately depends on nothing but `fitDocument` (itself effectively
+  // stable) so its own identity stays stable across every layer edit —
+  // CanvasWorkspace's ResizeObserver effect captures this function exactly
+  // once at mount, so a `notifyContainerResize` that changed identity on
+  // every layers update would silently start refitting against a stale,
+  // captured-at-mount `layers` snapshot for the rest of the session. Passive
+  // window/container resizes never need to land in undo history (matching
+  // the old Fabric-based engine's behavior), so the functional `setLayers`
+  // form — no fresh array to hand back to a caller — is fine here; the one
+  // caller that *does* need to commit a resize (resizeDocument, below)
+  // computes its own refit inline instead of going through this function.
+  const notifyContainerResize = useCallback(
+    (width: number, height: number) => {
+      availableSizeRef.current = { width, height };
+      const next = fitDocument();
+      // The base layer fills the page exactly — re-fit it whenever the page
+      // itself is resized, so cropping/resizing the document never leaves
+      // the base photo stranded at its old scale.
+      const baseId = baseLayerIdRef.current;
+      if (baseId) {
+        setLayers((prev) =>
+          prev.map((l) =>
+            l.id === baseId
+              ? { ...l, transform: { ...l.transform, x: 0, y: 0, scaleX: next.width / l.image.naturalWidth, scaleY: next.height / l.image.naturalHeight } }
+              : l,
+          ),
+        );
+      }
+    },
+    [fitDocument],
+  );
+
+  // Accepts an optional explicit `layers` array (the public, zero-arg
+  // `CanvasEngineContextValue.commitHistorySnapshot` type still allows this —
+  // extra optional params are compatible). Callers that just computed a new
+  // layers array via `setLayers(nextArray)` must pass that same array here
+  // rather than relying on the closure's `layers`: React state updates apply
+  // on the *next* render, so a commit called synchronously right after
+  // `setLayers` would otherwise see the array as it was *before* this
+  // action — silently pushing a snapshot of the wrong (stale) state.
+  const commitHistorySnapshot = useCallback((layersOverride?: EngineLayer[]) => {
+    if (isRestoringRef.current) return;
+    // Side effects (the ref mutation, the second setState) live here, in the
+    // callback body — not inside the setHistory updater. React Strict Mode
+    // double-invokes updater functions in dev (discarding the first result,
+    // but NOT undoing its side effects), so a ref mutated inside one gets
+    // corrupted on the throwaway first call. Computing `nextIndex` up front
+    // and passing a pure function to setHistory sidesteps that entirely.
+    const snapshot = createSnapshot(layersOverride ?? layers, documentAspectRatioRef.current, baseLayerIdRef.current);
+    const nextIndex = historyIndexRef.current + 1;
+    setHistory((prev) => [...prev.slice(0, nextIndex), snapshot]);
+    historyIndexRef.current = nextIndex;
+    setHistoryIndexState(nextIndex);
+  }, [layers]);
+
+  const selectLayer = useCallback((id: string) => setActiveLayerIdState(id), []);
+  const deselectLayer = useCallback(() => setActiveLayerIdState(null), []);
+
+  const toggleLayerVisibility = useCallback(
+    (id: string) => {
+      const next = layers.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l));
+      setLayers(next);
+      commitHistorySnapshot(next);
+    },
+    [commitHistorySnapshot, layers],
+  );
+
+  const toggleLayerLock = useCallback((id: string) => {
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, locked: !l.locked } : l)));
+  }, []);
+
+  const deleteLayer = useCallback(
+    (id: string) => {
+      const next = layers.filter((l) => l.id !== id);
+      setLayers(next);
+      if (activeLayerIdRef.current === id) setActiveLayerIdState(null);
+      if (id === baseLayerIdRef.current) {
+        baseLayerIdRef.current = null;
+        setBaseLayerIdState(null);
+        documentAspectRatioRef.current = DEFAULT_DOCUMENT_ASPECT_RATIO;
+        originalBaseImageDataUrlRef.current = null;
+        fitDocument();
+      }
+      setHasImage(next.length > 0);
+      commitHistorySnapshot(next);
+    },
+    [commitHistorySnapshot, fitDocument, layers],
+  );
+
+  const reorderLayer = useCallback((id: string, direction: "up" | "down") => {
+    const index = layers.findIndex((l) => l.id === id);
+    if (index === -1) return;
+    const targetIndex = direction === "up" ? index + 1 : index - 1;
+    if (targetIndex < 0 || targetIndex >= layers.length) return;
+    const next = [...layers];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    setLayers(next);
+    commitHistorySnapshot(next);
+  }, [commitHistorySnapshot, layers]);
+
+  const duplicateLayer = useCallback(
+    (id: string) => {
+      const source = layers.find((l) => l.id === id);
+      if (!source) return;
+      const copy: EngineLayer = {
+        ...source,
+        id: nextLayerId(),
+        name: `${source.name} copy`,
+        transform: { ...source.transform, x: source.transform.x + 16, y: source.transform.y + 16 },
+      };
+      const next = [...layers, copy];
+      setLayers(next);
+      setActiveLayerIdState(copy.id);
+      commitHistorySnapshot(next);
+    },
+    [commitHistorySnapshot, layers],
+  );
+
+  const updateLayerTransform = useCallback((id: string, transform: EngineLayer["transform"]) => {
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, transform } : l)));
+  }, []);
+
+  const createImageLayer = useCallback((image: HTMLImageElement, name: string): EngineLayer => {
+    const id = nextLayerId();
+    return {
+      id,
+      name,
+      type: "image",
+      visible: true,
+      locked: false,
+      opacity: 100,
+      blendMode: "Normal",
+      transform: { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight, scaleX: 1, scaleY: 1, rotation: 0 },
+      image: { bitmap: image, naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight, cropX: 0, cropY: 0, filters: { ...DEFAULT_FILTER_STATE, curvePoints: DEFAULT_CURVE_POINTS } },
+    };
+  }, []);
+
+  const loadImageFromFile = useCallback(
+    async (file: File) => {
+      setIsImageLoading(true);
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const image = await loadImageElement(dataUrl);
+        const isBase = baseLayerIdRef.current === null;
+        const layer = createImageLayer(image, `Layer ${layers.length + 1}`);
+
+        if (isBase) {
+          baseLayerIdRef.current = layer.id;
+          setBaseLayerIdState(layer.id);
+          documentAspectRatioRef.current = image.naturalWidth / image.naturalHeight;
+          originalBaseImageDataUrlRef.current = dataUrl;
+          const next = fitDocument();
+          layer.transform = { ...layer.transform, x: 0, y: 0, scaleX: next.width / image.naturalWidth, scaleY: next.height / image.naturalHeight };
+        } else {
+          const scale = Math.min(
+            (documentSize.width * IMAGE_FIT_PADDING) / image.naturalWidth,
+            (documentSize.height * IMAGE_FIT_PADDING) / image.naturalHeight,
+          );
+          layer.transform = {
+            ...layer.transform,
+            scaleX: scale,
+            scaleY: scale,
+            x: (documentSize.width - image.naturalWidth * scale) / 2,
+            y: (documentSize.height - image.naturalHeight * scale) / 2,
+          };
+        }
+
+        const next = [...layers, layer];
+        setLayers(next);
+        setActiveLayerIdState(layer.id);
+        setHasImage(true);
+        commitHistorySnapshot(next);
+      } finally {
+        setIsImageLoading(false);
+      }
+    },
+    [commitHistorySnapshot, createImageLayer, documentSize.height, documentSize.width, fitDocument, layers],
+  );
+
+  const addImageLayer = useCallback(
+    async (file: File) => {
+      if (!hasImage) return;
+      setIsImageLoading(true);
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const image = await loadImageElement(dataUrl);
+        const layer = createImageLayer(image, "Logo");
+        const scale = Math.min(
+          (documentSize.width * LOGO_MAX_FRACTION) / image.naturalWidth,
+          (documentSize.height * LOGO_MAX_FRACTION) / image.naturalHeight,
+          1,
+        );
+        layer.transform = {
+          ...layer.transform,
+          scaleX: scale,
+          scaleY: scale,
+          x: documentSize.width - image.naturalWidth * scale - LOGO_MARGIN,
+          y: documentSize.height - image.naturalHeight * scale - LOGO_MARGIN,
+        };
+        const next = [...layers, layer];
+        setLayers(next);
+        setActiveLayerIdState(layer.id);
+        commitHistorySnapshot(next);
+      } finally {
+        setIsImageLoading(false);
+      }
+    },
+    [commitHistorySnapshot, createImageLayer, documentSize.height, documentSize.width, hasImage, layers],
+  );
+
+  const addTextWatermark = useCallback(
+    (_text: string) => {
+      showNotice("Text layers — coming soon");
+    },
+    [showNotice],
+  );
+
+  const resizeDocument = useCallback(
+    (widthPx: number, heightPx: number) => {
+      const baseId = baseLayerIdRef.current;
+      if (!hasImage || !baseId || widthPx <= 0 || heightPx <= 0) return;
+      documentAspectRatioRef.current = widthPx / heightPx;
+      const size = fitDocument();
+      const next = layers.map((l) =>
+        l.id === baseId
+          ? { ...l, transform: { ...l.transform, x: 0, y: 0, scaleX: size.width / l.image.naturalWidth, scaleY: size.height / l.image.naturalHeight } }
+          : l,
+      );
+      setLayers(next);
+      commitHistorySnapshot(next);
+    },
+    [commitHistorySnapshot, fitDocument, hasImage, layers],
+  );
+
+  const getLayerThumbnail = useCallback(
+    (id: string) => {
+      const layer = layers.find((l) => l.id === id);
+      return layer ? renderLayerThumbnail(layer) : null;
+    },
+    [layers],
+  );
+
+  const addPendingAsset = useCallback((file: File) => {
+    const id = `asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const previewUrl = URL.createObjectURL(file);
+    setPendingAssets((prev) => [...prev, { id, file, previewUrl, status: "loading" as const }]);
+    probeImageDimensions(previewUrl)
+      .then(() => setPendingAssets((prev) => prev.map((a) => (a.id === id ? { ...a, status: "ready" as const } : a))))
+      .catch(() => {
+        URL.revokeObjectURL(previewUrl);
+        setPendingAssets((prev) => prev.filter((a) => a.id !== id));
+      });
+  }, []);
+
+  const removePendingAsset = useCallback((id: string) => {
+    setPendingAssets((prev) => {
+      const asset = prev.find((a) => a.id === id);
+      if (asset) URL.revokeObjectURL(asset.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
+  const placePendingAsset = useCallback(
+    async (id: string) => {
+      const asset = pendingAssetsRef.current.find((a) => a.id === id);
+      if (!asset || asset.status !== "ready") return;
+      await loadImageFromFile(asset.file);
+      removePendingAsset(id);
+    },
+    [loadImageFromFile, removePendingAsset],
+  );
+
+  const cancelAutoClean = useCallback(() => {
+    autoCleanMarkRef.current = null;
+    setAutoCleanPreview(false);
+    setAutoCleanEllipsePreview(null);
+  }, []);
+
+  const startAutoClean = useCallback(() => {
+    const baseId = baseLayerIdRef.current;
+    const baseLayer = layers.find((l) => l.id === baseId);
+    if (!baseLayer || autoCleanPreview || isAutoCleaning) return;
+
+    const sourceElement = baseLayer.image.bitmap as unknown as CanvasImageElement;
     const { width: nativeWidth, height: nativeHeight } = getElementNaturalSize(sourceElement);
     if (!nativeWidth || !nativeHeight) return;
 
@@ -699,644 +589,427 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       showAutoCleanMessage("No watermark-like mark detected");
       return;
     }
-
     autoCleanMarkRef.current = mark;
 
-    // Native image pixel coordinates -> Fabric object space, the same
-    // mapping useCanvasCrop's commit() uses in reverse.
-    const scaleX = obj.scaleX ?? 1;
-    const scaleY = obj.scaleY ?? 1;
-    const cropX = obj.cropX ?? 0;
-    const cropY = obj.cropY ?? 0;
-    const overlay = new Ellipse({
-      originX: "center",
-      originY: "center",
-      left: (obj.left ?? 0) + (mark.ellipse.cx - cropX) * scaleX,
-      top: (obj.top ?? 0) + (mark.ellipse.cy - cropY) * scaleY,
-      rx: mark.ellipse.rx * scaleX,
-      ry: mark.ellipse.ry * scaleY,
-      fill: "rgba(56, 189, 248, 0.18)",
-      stroke: "#38BDF8",
-      strokeDashArray: [6, 4],
-      strokeWidth: 2,
-      selectable: false,
-      evented: false,
-      excludeFromExport: true,
+    const { transform, image } = baseLayer;
+    setAutoCleanEllipsePreview({
+      cx: nativeToObject(mark.ellipse.cx, transform.x, transform.scaleX, image.cropX),
+      cy: nativeToObject(mark.ellipse.cy, transform.y, transform.scaleY, image.cropY),
+      rx: mark.ellipse.rx * transform.scaleX,
+      ry: mark.ellipse.ry * transform.scaleY,
     });
-    autoCleanOverlayRef.current = overlay;
-    canvas.add(overlay);
-    canvas.bringObjectToFront(overlay);
-    canvas.requestRenderAll();
     setAutoCleanPreview(true);
-  }, [cropMode, autoCleanPreview, isAutoCleaning, healMode, showAutoCleanMessage]);
+  }, [autoCleanPreview, isAutoCleaning, layers, showAutoCleanMessage]);
 
-  // Phase 2 — reconstructs exactly the mask that was just previewed (never
-  // recomputed here), so what the user approved is what gets applied.
   const applyAutoClean = useCallback(async () => {
-    const canvas = canvasRef.current;
-    const baseId = baseImageLayerIdRef.current;
-    const obj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
+    const baseId = baseLayerIdRef.current;
+    const baseLayer = layers.find((l) => l.id === baseId);
     const mark = autoCleanMarkRef.current;
-    if (!canvas || !obj || !(obj instanceof FabricImage) || !mark) {
+    if (!baseLayer || !mark) {
       cancelAutoClean();
       return;
     }
-
-    if (autoCleanOverlayRef.current) {
-      canvas.remove(autoCleanOverlayRef.current);
-      autoCleanOverlayRef.current = null;
-    }
     setAutoCleanPreview(false);
+    setAutoCleanEllipsePreview(null);
     setIsAutoCleaning(true);
     try {
-      const sourceElement = obj._originalElement as CanvasImageElement;
+      const sourceElement = baseLayer.image.bitmap as unknown as CanvasImageElement;
       const { width: nativeWidth, height: nativeHeight } = getElementNaturalSize(sourceElement);
       if (!nativeWidth || !nativeHeight) return;
-
       const cleanedCanvas = await reconstructMark(sourceElement, nativeWidth, nativeHeight, mark);
       const dataUrl = cleanedCanvas.toDataURL("image/png");
       const newImage = await loadHtmlImage(dataUrl);
-
-      // setElement() resets the crop window to the new element's full size —
-      // restore whatever crop was previously applied so it survives.
-      const prevWidth = obj.width;
-      const prevHeight = obj.height;
-      const prevCropX = obj.cropX;
-      const prevCropY = obj.cropY;
-      obj.setElement(newImage);
-      obj.set({ width: prevWidth, height: prevHeight, cropX: prevCropX, cropY: prevCropY });
-      obj.setCoords();
-      canvas.requestRenderAll();
-      commitHistorySnapshot();
+      const next = layers.map((l) => (l.id === baseLayer.id ? { ...l, image: { ...l.image, bitmap: newImage } } : l));
+      setLayers(next);
+      commitHistorySnapshot(next);
     } finally {
       autoCleanMarkRef.current = null;
       setIsAutoCleaning(false);
     }
-  }, [cancelAutoClean, commitHistorySnapshot]);
+  }, [cancelAutoClean, commitHistorySnapshot, layers]);
 
-  // Removes any live heal-brush preview strokes and restores whatever
-  // drawing mode was active before heal mode started, without changing the
-  // image.
-  const cancelHealMode = useCallback(() => {
-    const canvas = canvasRef.current;
-    healPathsRef.current.forEach((path) => canvas?.remove(path));
-    healPathsRef.current = [];
-    healModeRef.current = false;
-    setHealMode(false);
-    setHasHealStrokes(false);
-    applyDrawingMode(drawingToolRef.current, brushColor, brushWidth);
-    canvas?.requestRenderAll();
-  }, [applyDrawingMode, brushColor, brushWidth]);
-
-  // Switches the canvas into free-drawing mode with a translucent
-  // heal-highlight brush (distinct from the real paint Brush's color/tool)
-  // so the user can mark an arbitrary area to remove. Mutually exclusive
-  // with crop and Auto Clean preview.
   const enterHealMode = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !hasImage || cropMode || autoCleanPreview || healMode) return;
-    cancelAutoClean();
-    const brush = new PencilBrush(canvas);
-    brush.color = HEAL_BRUSH_COLOR;
-    brush.width = brushWidth;
-    canvas.freeDrawingBrush = brush;
-    canvas.isDrawingMode = true;
-    healModeRef.current = true;
-    setHasHealStrokes(false);
-    setHealMode(true);
-  }, [hasImage, cropMode, autoCleanPreview, healMode, cancelAutoClean, brushWidth]);
+    if (!hasImage) return;
+    showNotice("Heal brush — coming soon");
+  }, [hasImage, showNotice]);
+  const cancelHealMode = useCallback(() => {}, []);
+  const applyHealMode = useCallback(async () => {}, []);
 
-  // Rasterizes the accumulated heal-brush strokes into a native-resolution
-  // mask (object-space canvas pixels -> native image pixels, the same
-  // mapping useCanvasCrop's commit() and Auto Clean's preview overlay use)
-  // and reconstructs exactly that masked area.
-  const applyHealMode = useCallback(async () => {
-    const canvas = canvasRef.current;
-    const baseId = baseImageLayerIdRef.current;
-    const obj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
-    const paths = healPathsRef.current;
-    if (!canvas || !obj || !(obj instanceof FabricImage) || paths.length === 0) {
-      cancelHealMode();
-      return;
-    }
+  const activeLayer = activeLayerId ? layers.find((l) => l.id === activeLayerId) ?? null : null;
 
-    const imgBounds = {
-      left: obj.left ?? 0,
-      top: obj.top ?? 0,
-      width: obj.getScaledWidth(),
-      height: obj.getScaledHeight(),
-    };
+  const activeFilterState = useMemo(() => activeLayer?.image.filters ?? DEFAULT_FILTER_STATE, [activeLayer]);
 
-    // Union bounding box of every stroke, padded a little for feather
-    // headroom and clamped to the photo's own bounds so a stray stroke off
-    // the edge can't touch anything outside the image.
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const path of paths) {
-      const b = path.getBoundingRect();
-      minX = Math.min(minX, b.left);
-      minY = Math.min(minY, b.top);
-      maxX = Math.max(maxX, b.left + b.width);
-      maxY = Math.max(maxY, b.top + b.height);
-    }
-    const pad = 4;
-    minX = Math.max(imgBounds.left, minX - pad);
-    minY = Math.max(imgBounds.top, minY - pad);
-    maxX = Math.min(imgBounds.left + imgBounds.width, maxX + pad);
-    maxY = Math.min(imgBounds.top + imgBounds.height, maxY + pad);
-    const boxWidth = Math.max(1, Math.round(maxX - minX));
-    const boxHeight = Math.max(1, Math.round(maxY - minY));
-
-    healModeRef.current = false;
-    setHealMode(false);
-    setHasHealStrokes(false);
-    applyDrawingMode(drawingToolRef.current, brushColor, brushWidth);
-    paths.forEach((path) => canvas.remove(path));
-    healPathsRef.current = [];
-
-    if (minX >= maxX || minY >= maxY) {
-      canvas.requestRenderAll();
-      return;
-    }
-
-    setIsAutoCleaning(true);
-    try {
-      const sourceElement = obj._originalElement as CanvasImageElement;
-      const { width: nativeWidth, height: nativeHeight } = getElementNaturalSize(sourceElement);
-      if (!nativeWidth || !nativeHeight) return;
-
-      // Render the strokes at their own on-screen (object-space) resolution
-      // first — Fabric's own render() reproduces the exact stroke geometry
-      // — then resample into native image pixel space, same as any other
-      // object-space -> native conversion in this file.
-      const strokeCanvas = document.createElement("canvas");
-      strokeCanvas.width = boxWidth;
-      strokeCanvas.height = boxHeight;
-      const strokeCtx = strokeCanvas.getContext("2d");
-      if (!strokeCtx) return;
-      strokeCtx.translate(-minX, -minY);
-      paths.forEach((path) => path.render(strokeCtx));
-
-      const scaleX = obj.scaleX ?? 1;
-      const scaleY = obj.scaleY ?? 1;
-      const cropX = obj.cropX ?? 0;
-      const cropY = obj.cropY ?? 0;
-      const nativeX = (minX - imgBounds.left) / scaleX + cropX;
-      const nativeY = (minY - imgBounds.top) / scaleY + cropY;
-      const nativeBoxWidth = Math.max(1, Math.round(boxWidth / scaleX));
-      const nativeBoxHeight = Math.max(1, Math.round(boxHeight / scaleY));
-      const rectX = Math.max(0, Math.min(nativeWidth - 1, Math.round(nativeX)));
-      const rectY = Math.max(0, Math.min(nativeHeight - 1, Math.round(nativeY)));
-      const rect: RegionRect = {
-        x: rectX,
-        y: rectY,
-        width: Math.max(1, Math.min(nativeBoxWidth, nativeWidth - rectX)),
-        height: Math.max(1, Math.min(nativeBoxHeight, nativeHeight - rectY)),
-      };
-
-      const nativeMaskCanvas = document.createElement("canvas");
-      nativeMaskCanvas.width = rect.width;
-      nativeMaskCanvas.height = rect.height;
-      const nativeMaskCtx = nativeMaskCanvas.getContext("2d");
-      if (!nativeMaskCtx) return;
-      nativeMaskCtx.drawImage(strokeCanvas, 0, 0, boxWidth, boxHeight, 0, 0, rect.width, rect.height);
-      const maskData = nativeMaskCtx.getImageData(0, 0, rect.width, rect.height);
-      const rawAlpha = new Float32Array(rect.width * rect.height);
-      for (let i = 0; i < rawAlpha.length; i++) rawAlpha[i] = maskData.data[i * 4 + 3] / 255;
-      const alpha = featherAlphaMask(rawAlpha, rect.width, rect.height, 2);
-
-      const cleanedCanvas = await reconstructManualMask(sourceElement, nativeWidth, nativeHeight, { rect, alpha });
-      const dataUrl = cleanedCanvas.toDataURL("image/png");
-      const newImage = await loadHtmlImage(dataUrl);
-
-      // setElement() resets the crop window to the new element's full size —
-      // restore whatever crop was previously applied so it survives.
-      const prevWidth = obj.width;
-      const prevHeight = obj.height;
-      const prevCropX = obj.cropX;
-      const prevCropY = obj.cropY;
-      obj.setElement(newImage);
-      obj.set({ width: prevWidth, height: prevHeight, cropX: prevCropX, cropY: prevCropY });
-      obj.setCoords();
-      canvas.requestRenderAll();
-      commitHistorySnapshot();
-    } finally {
-      setIsAutoCleaning(false);
-    }
-  }, [cancelHealMode, applyDrawingMode, brushColor, brushWidth, commitHistorySnapshot]);
-
-  const selectLayer = useCallback(
-    (id: string) => {
-      const obj = layerObjectsRef.current.get(id);
-      const canvas = canvasRef.current;
-      if (!obj || !canvas) return;
-      canvas.setActiveObject(obj);
-      canvas.requestRenderAll();
-      setActiveLayer(id, obj);
-    },
-    [setActiveLayer],
-  );
-
-  const toggleLayerVisibility = useCallback(
-    (id: string) => {
-      const obj = layerObjectsRef.current.get(id);
-      if (!obj) return;
-      obj.set("visible", !obj.visible);
-      canvasRef.current?.requestRenderAll();
-      syncLayers();
-      commitHistorySnapshot();
-    },
-    [syncLayers, commitHistorySnapshot],
-  );
-
-  const deleteLayer = useCallback(
-    (id: string) => {
-      const canvas = canvasRef.current;
-      const obj = layerObjectsRef.current.get(id);
-      if (!canvas || !obj) return;
-      canvas.remove(obj);
-      setFilterStateByLayer((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-      if (activeLayerIdRef.current === id) setActiveLayer(null, null);
-      setHasImage(canvas.getObjects().length > 0);
-
-      // Losing the base photo means the page itself no longer has a shape
-      // to follow — fall back to the default placeholder aspect ratio
-      // instead of leaving the canvas pinned to whatever the deleted photo
-      // last measured.
-      if (id === baseImageLayerIdRef.current) {
-        baseImageLayerIdRef.current = null;
-        documentAspectRatioRef.current = DEFAULT_DOCUMENT_ASPECT_RATIO;
-        fitCanvasToDocument();
-      } else {
-        canvas.requestRenderAll();
-      }
-
-      commitHistorySnapshot();
-    },
-    [commitHistorySnapshot, fitCanvasToDocument, setActiveLayer],
-  );
-
-  const reorderLayer = useCallback(
-    (id: string, direction: "up" | "down") => {
-      const canvas = canvasRef.current;
-      const obj = layerObjectsRef.current.get(id);
-      if (!canvas || !obj) return;
-      if (direction === "up") canvas.bringObjectForward(obj);
-      else canvas.sendObjectBackwards(obj);
-      canvas.requestRenderAll();
-      syncLayers();
-      commitHistorySnapshot();
-    },
-    [syncLayers, commitHistorySnapshot],
-  );
-
-  const setExposure = useCallback(
-    (value: number) => {
+  const updateActiveFilters = useCallback(
+    (patch: Partial<FilterState>) => {
       if (!activeLayerId) return;
-      setFilterStateByLayer((prev) => {
-        const current = prev[activeLayerId] ?? DEFAULT_FILTER_STATE;
-        const nextState = { ...current, exposure: value };
-        applyFiltersForLayer(activeLayerId, nextState);
-        return { ...prev, [activeLayerId]: nextState };
-      });
+      setLayers((prev) =>
+        prev.map((l) => (l.id === activeLayerId ? { ...l, image: { ...l.image, filters: { ...l.image.filters, ...patch } } } : l)),
+      );
     },
-    [activeLayerId, applyFiltersForLayer],
+    [activeLayerId],
   );
 
-  const setContrast = useCallback(
-    (value: number) => {
-      if (!activeLayerId) return;
-      setFilterStateByLayer((prev) => {
-        const current = prev[activeLayerId] ?? DEFAULT_FILTER_STATE;
-        const nextState = { ...current, contrast: value };
-        applyFiltersForLayer(activeLayerId, nextState);
-        return { ...prev, [activeLayerId]: nextState };
-      });
-    },
-    [activeLayerId, applyFiltersForLayer],
-  );
-
+  const setExposure = useCallback((value: number) => updateActiveFilters({ exposure: value }), [updateActiveFilters]);
+  const setContrast = useCallback((value: number) => updateActiveFilters({ contrast: value }), [updateActiveFilters]);
+  const setSaturation = useCallback((value: number) => updateActiveFilters({ saturation: value }), [updateActiveFilters]);
   const setBlendMode = useCallback(
     (mode: BlendModeKey) => {
       if (!activeLayerId) return;
-      setFilterStateByLayer((prev) => {
-        const current = prev[activeLayerId] ?? DEFAULT_FILTER_STATE;
-        const nextState = { ...current, blendMode: mode };
-        applyFiltersForLayer(activeLayerId, nextState);
-        return { ...prev, [activeLayerId]: nextState };
-      });
-      commitHistorySnapshot();
+      const next = layers.map((l) => (l.id === activeLayerId ? { ...l, blendMode: mode } : l));
+      setLayers(next);
+      commitHistorySnapshot(next);
     },
-    [activeLayerId, applyFiltersForLayer, commitHistorySnapshot],
+    [activeLayerId, commitHistorySnapshot, layers],
   );
-
   const setCurvePoint = useCallback(
     (index: number, point: CurvePoint) => {
       if (!activeLayerId) return;
-      setFilterStateByLayer((prev) => {
-        const current = prev[activeLayerId] ?? DEFAULT_FILTER_STATE;
-        const nextPoints = current.curvePoints.map((p, i) => (i === index ? point : p));
-        const nextState = { ...current, curvePoints: nextPoints };
-        applyFiltersForLayer(activeLayerId, nextState);
-        return { ...prev, [activeLayerId]: nextState };
-      });
+      updateActiveFilters({ curvePoints: activeFilterState.curvePoints.map((p, i) => (i === index ? point : p)) });
     },
-    [activeLayerId, applyFiltersForLayer],
+    [activeFilterState.curvePoints, activeLayerId, updateActiveFilters],
+  );
+
+  const activeLayerOpacity = activeLayer?.opacity ?? 100;
+  const setOpacity = useCallback(
+    (value: number) => {
+      if (!activeLayerId) return;
+      const clamped = Math.min(100, Math.max(0, value));
+      setLayers((prev) => prev.map((l) => (l.id === activeLayerId ? { ...l, opacity: clamped } : l)));
+    },
+    [activeLayerId],
   );
 
   const jumpToHistory = useCallback(
     (index: number) => {
-      const canvas = canvasRef.current;
       const entry = history[index];
-      if (!canvas || !entry) return;
+      if (!entry) return;
       isRestoringRef.current = true;
-      // A snapshot's object data only makes sense at the page shape it was
-      // taken at — restore that aspect ratio (and re-fit the base photo to
-      // it) before/alongside the objects themselves, or a crop undone/redone
-      // across a resize would restore objects sized for a canvas that no
-      // longer matches.
-      documentAspectRatioRef.current = entry.aspectRatio;
-      void canvas.loadFromJSON(entry.data).then(() => {
-        syncLayers();
-        fitCanvasToDocument();
-        setHasImage(canvas.getObjects().length > 0);
-        // loadFromJSON reconstructs fresh Fabric object instances, so the
-        // previously-active layer id now points at a stale, removed object —
-        // re-resolve it against the just-rebuilt map.
-        const currentId = activeLayerIdRef.current;
-        setActiveLayerObjectState(currentId ? layerObjectsRef.current.get(currentId) ?? null : null);
-        historyIndexRef.current = index;
-        setHistoryIndexState(index);
-        isRestoringRef.current = false;
-      });
+      documentAspectRatioRef.current = entry.documentAspectRatio;
+      const restored = entry.layers;
+      setLayers(restored);
+      setHasImage(restored.length > 0);
+      baseLayerIdRef.current = entry.baseLayerId;
+      setBaseLayerIdState(entry.baseLayerId);
+      fitDocument();
+      if (activeLayerIdRef.current && !restored.some((l) => l.id === activeLayerIdRef.current)) {
+        setActiveLayerIdState(null);
+      }
+      historyIndexRef.current = index;
+      setHistoryIndexState(index);
+      isRestoringRef.current = false;
     },
-    [history, syncLayers, fitCanvasToDocument],
+    [fitDocument, history],
   );
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
+  const undo = useCallback(() => { if (historyIndex > 0) jumpToHistory(historyIndex - 1); }, [historyIndex, jumpToHistory]);
+  const redo = useCallback(() => { if (historyIndex < history.length - 1) jumpToHistory(historyIndex + 1); }, [historyIndex, history.length, jumpToHistory]);
 
-  const undo = useCallback(() => {
-    if (historyIndex <= 0) return;
-    jumpToHistory(historyIndex - 1);
-  }, [historyIndex, jumpToHistory]);
+  // --- Crop (native canvas engine — plain object-space math, no canvas library involved) ---
+  const [cropSession, setCropSession] = useState<CropSessionState | null>(null);
+  const cropSessionRef = useRef<CropSessionState | null>(null);
+  const cropDragRef = useRef<CropDragState>(null);
+  useEffect(() => {
+    cropSessionRef.current = cropSession;
+  }, [cropSession]);
 
-  const redo = useCallback(() => {
-    if (historyIndex >= history.length - 1) return;
-    jumpToHistory(historyIndex + 1);
-  }, [historyIndex, history.length, jumpToHistory]);
+  const cropMode = cropSession !== null;
 
-  // Guards against entering crop mode with nothing valid to crop (mirrors
-  // the disabled state of the toolbar's crop button, just defensively).
-  // Also cancels any pending Auto Clean preview / heal-brush session — the
-  // overlays would otherwise fight for the same canvas space.
   const enterCropMode = useCallback(() => {
-    if (activeLayerObject) {
-      cancelAutoClean();
-      cancelHealMode();
-      setCropMode(true);
-    }
-  }, [activeLayerObject, cancelAutoClean, cancelHealMode]);
-  const cancelCropMode = useCallback(() => setCropMode(false), []);
+    if (!hasImage || !activeLayerId) return;
+    const layer = layers.find((l) => l.id === activeLayerId);
+    if (!layer) return;
+    setCropSession(createCropSession(layer));
+  }, [activeLayerId, hasImage, layers]);
 
-  // The crop rect's own lifecycle, custom resize/move handles, dimension
-  // math, and dimmed-mask/grid chrome all live in this hook — see
-  // hooks/useCanvasCrop.ts. CanvasEngineContext just feeds it the current
-  // canvas/target image and turns its commit() result into a crop on the
-  // underlying FabricImage.
-  const crop = useCanvasCrop({
-    canvas: registeredCanvas,
-    active: cropMode,
-    targetImage: activeLayerObject,
-  });
+  const cancelCropMode = useCallback(() => {
+    cropDragRef.current = null;
+    setCropSession(null);
+  }, []);
 
   const applyCrop = useCallback(() => {
-    const canvas = canvasRef.current;
-    const obj = activeLayerObject;
-    const result = crop.commit();
-    if (!canvas || !obj || !(obj instanceof FabricImage) || !result) {
-      setCropMode(false);
-      return;
-    }
+    const session = cropSessionRef.current;
+    if (!session) return;
+    const patch = commitCrop(session);
+    const next = layers.map((l) =>
+      l.id === session.layerId
+        ? {
+            ...l,
+            transform: { ...l.transform, x: patch.x, y: patch.y, width: patch.width, height: patch.height },
+            image: { ...l.image, cropX: patch.cropX, cropY: patch.cropY },
+          }
+        : l,
+    );
+    setLayers(next);
+    cropDragRef.current = null;
+    setCropSession(null);
+    commitHistorySnapshot(next);
+  }, [commitHistorySnapshot, layers]);
 
-    obj.set({
-      cropX: result.cropX,
-      cropY: result.cropY,
-      width: result.width,
-      height: result.height,
-      left: result.left,
-      top: result.top,
+  const resetCrop = useCallback(() => {
+    setCropSession((prev) => (prev ? { ...prev, cropRect: { ...prev.imageBox }, aspectLocked: false, preset: "free" } : prev));
+  }, []);
+
+  const setCropAspectLocked = useCallback((locked: boolean) => {
+    setCropSession((prev) => {
+      if (!prev) return prev;
+      if (locked) return { ...prev, aspectLocked: true, aspectRatio: prev.cropRect.width / prev.cropRect.height };
+      return { ...prev, aspectLocked: false, preset: "free" };
     });
+  }, []);
 
-    // Toggling crop mode off unmounts the crop hook's overlay (rect, dimmed
-    // mask, grid) via its own layout-effect cleanup, synchronously in this
-    // same commit — no separate manual teardown needed here.
-    setCropMode(false);
+  const applyCropPreset = useCallback((preset: CropPresetKey) => {
+    setCropSession((prev) => {
+      if (!prev) return prev;
+      const config = CROP_PRESETS.find((p) => p.key === preset);
+      if (!config || config.ratio === null) return { ...prev, preset: "free", aspectLocked: false };
+      return {
+        ...prev,
+        preset,
+        aspectLocked: true,
+        aspectRatio: config.ratio,
+        cropRect: fitCropRectToRatio(prev.imageBox, config.ratio),
+      };
+    });
+  }, []);
 
-    // Cropping the base photo reshapes the page itself — resize the document
-    // to the new aspect ratio so the card keeps matching the image exactly,
-    // instead of leaving the cropped photo stranded inside its old frame.
-    if (activeLayerId === baseImageLayerIdRef.current) {
-      documentAspectRatioRef.current = (obj.width ?? 1) / (obj.height ?? 1);
-      fitCanvasToDocument();
+  const setCropWidthPx = useCallback((nativeWidth: number) => {
+    if (!Number.isFinite(nativeWidth) || nativeWidth <= 0) return;
+    setCropSession((prev) => (prev ? { ...prev, cropRect: stepCropWidth(prev, nativeWidth) } : prev));
+  }, []);
+
+  const setCropHeightPx = useCallback((nativeHeight: number) => {
+    if (!Number.isFinite(nativeHeight) || nativeHeight <= 0) return;
+    setCropSession((prev) => (prev ? { ...prev, cropRect: stepCropHeight(prev, nativeHeight) } : prev));
+  }, []);
+
+  const setCropXPx = useCallback((nativeX: number) => {
+    if (!Number.isFinite(nativeX)) return;
+    setCropSession((prev) => (prev ? { ...prev, cropRect: stepCropX(prev, nativeX) } : prev));
+  }, []);
+
+  const setCropYPx = useCallback((nativeY: number) => {
+    if (!Number.isFinite(nativeY)) return;
+    setCropSession((prev) => (prev ? { ...prev, cropRect: stepCropY(prev, nativeY) } : prev));
+  }, []);
+
+  const beginCropHandleDrag = useCallback((handle: CropHandleKey) => {
+    const session = cropSessionRef.current;
+    if (!session) return;
+    cropDragRef.current = { kind: "handle", handle, startRect: session.cropRect };
+  }, []);
+
+  const beginCropBodyDrag = useCallback(
+    (screenPoint: Point) => {
+      const session = cropSessionRef.current;
+      if (!session) return;
+      cropDragRef.current = { kind: "body", startImageBox: session.imageBox, startPointerObject: toObject(screenPoint, viewport) };
+    },
+    [viewport],
+  );
+
+  const updateCropDrag = useCallback(
+    (screenPoint: Point) => {
+      const drag = cropDragRef.current;
+      const session = cropSessionRef.current;
+      if (!drag || !session) return;
+      const objectPoint = toObject(screenPoint, viewport);
+      if (drag.kind === "handle") {
+        const cropRect = stepCropResize(
+          drag.startRect,
+          session.imageBox,
+          drag.handle,
+          objectPoint,
+          session.aspectLocked,
+          session.aspectRatio,
+        );
+        setCropSession((prev) => (prev ? { ...prev, cropRect } : prev));
+      } else {
+        const delta = { x: objectPoint.x - drag.startPointerObject.x, y: objectPoint.y - drag.startPointerObject.y };
+        const imageBox = stepCropPan(drag.startImageBox, session.cropRect, delta);
+        setCropSession((prev) => (prev ? { ...prev, imageBox } : prev));
+      }
+    },
+    [viewport],
+  );
+
+  const endCropDrag = useCallback(() => {
+    cropDragRef.current = null;
+  }, []);
+
+  const cropPixelSize = useMemo(
+    () =>
+      cropSession
+        ? {
+            width: Math.round(cropSession.cropRect.width / cropSession.scaleX),
+            height: Math.round(cropSession.cropRect.height / cropSession.scaleY),
+          }
+        : { width: 0, height: 0 },
+    [cropSession],
+  );
+
+  const cropOffsetPx = useMemo(
+    () =>
+      cropSession
+        ? {
+            x: Math.round((cropSession.cropRect.x - cropSession.imageBox.x) / cropSession.scaleX),
+            y: Math.round((cropSession.cropRect.y - cropSession.imageBox.y) / cropSession.scaleY),
+          }
+        : { x: 0, y: 0 },
+    [cropSession],
+  );
+
+  const cropBadgeRect = useMemo(() => {
+    if (!cropSession) return null;
+    const topLeft = toScreen({ x: cropSession.cropRect.x, y: cropSession.cropRect.y }, viewport);
+    return {
+      left: topLeft.x,
+      top: topLeft.y,
+      width: cropSession.cropRect.width * viewport.zoom,
+      height: cropSession.cropRect.height * viewport.zoom,
+    };
+  }, [cropSession, viewport]);
+
+  // Esc/Enter work regardless of which element has focus — except Enter while actively typing
+  // in a dimension field, which should commit that field (its own onKeyDown already does that),
+  // not also apply the whole crop out from under it.
+  useEffect(() => {
+    if (!cropMode) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isFormField = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelCropMode();
+      } else if (event.key === "Enter" && !isFormField) {
+        event.preventDefault();
+        applyCrop();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cropMode, cancelCropMode, applyCrop]);
+
+  const toggleBeforeAfter = useCallback(() => {
+    // Side effects (ref writes, the async image load) live directly in this
+    // callback body rather than inside a setState updater — same rationale
+    // as commitHistorySnapshot above: Strict Mode's dev-only double-invoke
+    // of updater functions would otherwise fire the async load twice and
+    // leave beforeHiddenIdsRef reflecting whichever invocation ran last.
+    if (!beforeAfter) {
+      if (!originalBaseImageDataUrlRef.current) return;
+      const hidden = new Set<string>();
+      setLayers((current) =>
+        current.map((l) => {
+          if (l.visible) hidden.add(l.id);
+          return { ...l, visible: false };
+        }),
+      );
+      beforeHiddenIdsRef.current = hidden;
+      setBeforeAfter(true);
+      void loadImageElement(originalBaseImageDataUrlRef.current).then((img) => setBeforeAfterBitmap(img));
     } else {
-      canvas.requestRenderAll();
+      setBeforeAfterBitmap(null);
+      setLayers((current) => current.map((l) => (beforeHiddenIdsRef.current.has(l.id) ? { ...l, visible: true } : l)));
+      beforeHiddenIdsRef.current = new Set();
+      setBeforeAfter(false);
     }
+  }, [beforeAfter]);
 
-    commitHistorySnapshot();
-  }, [activeLayerId, activeLayerObject, commitHistorySnapshot, fitCanvasToDocument, crop]);
+  const exportImage = useCallback(
+    async ({ format, multiplier }: { format: ExportFormat; multiplier: number }) => {
+      const blob = await exportScene({ layers, documentSize, format, multiplier });
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `creativeflow-export.${format === "jpeg" ? "jpg" : "png"}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    },
+    [documentSize, layers],
+  );
 
-  const setZoom = useCallback((value: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const next = clampZoom(value);
-    canvas.zoomToPoint(new Point(canvas.getWidth() / 2, canvas.getHeight() / 2), next);
-    canvas.requestRenderAll();
-    setZoomState(next);
-  }, []);
+  const setDrawingTool = useCallback(
+    (tool: DrawingTool) => {
+      if (tool === "brush" || tool === "lasso") {
+        showNotice("Drawing tools — coming soon");
+        return;
+      }
+      setDrawingToolState(tool);
+    },
+    [showNotice],
+  );
 
-  const zoomIn = useCallback(() => setZoom(zoom * ZOOM_STEP), [setZoom, zoom]);
-  const zoomOut = useCallback(() => setZoom(zoom / ZOOM_STEP), [setZoom, zoom]);
+  const animateZoomTo = useCallback(
+    (target: number, focalPoint?: { x: number; y: number }) => {
+      if (zoomAnimationRef.current !== null) {
+        cancelAnimationFrame(zoomAnimationRef.current);
+        zoomAnimationRef.current = null;
+      }
+      const clamped = clampZoom(target);
+      const startViewport = viewport;
+      const focal = focalPoint ?? { x: documentSize.width / 2, y: documentSize.height / 2 };
+      const startZoom = startViewport.zoom;
+      const startTime = performance.now();
+      const duration = 220;
 
+      const step = (now: number) => {
+        const t = Math.min(1, (now - startTime) / duration);
+        const value = startZoom + (clamped - startZoom) * easeOutCubic(t);
+        setViewportState((current) => zoomToPoint(current, value, focal));
+        zoomAnimationRef.current = t < 1 ? requestAnimationFrame(step) : null;
+      };
+      zoomAnimationRef.current = requestAnimationFrame(step);
+    },
+    [documentSize.height, documentSize.width, viewport],
+  );
+
+  const setZoom = useCallback((value: number) => animateZoomTo(value), [animateZoomTo]);
+  const zoomIn = useCallback(() => animateZoomTo(viewport.zoom * ZOOM_STEP), [animateZoomTo, viewport.zoom]);
+  const zoomOut = useCallback(() => animateZoomTo(viewport.zoom / ZOOM_STEP), [animateZoomTo, viewport.zoom]);
   const resetView = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-    canvas.requestRenderAll();
-    setZoomState(1);
+    if (zoomAnimationRef.current !== null) {
+      cancelAnimationFrame(zoomAnimationRef.current);
+      zoomAnimationRef.current = null;
+    }
+    setViewportState({ zoom: 1, panX: 0, panY: 0 });
   }, []);
-
-  // Re-centers the current zoom level (undoes panning) without resetting
-  // back to 100% — distinct from Reset View, which does both.
-  const centerCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const vpt = canvas?.viewportTransform;
-    if (!canvas || !vpt) return;
-    canvas.setViewportTransform([vpt[0], vpt[1], vpt[2], vpt[3], 0, 0]);
-    canvas.requestRenderAll();
-  }, []);
+  const centerCanvas = useCallback(() => setViewportState((v) => ({ ...v, panX: 0, panY: 0 })), []);
+  const setViewport = useCallback((v: Viewport) => setViewportState(v), []);
 
   const toggleGrid = useCallback(() => setShowGrid((prev) => !prev), []);
 
-  // A standalone rule-of-thirds composition guide, independent of the one
-  // useCanvasCrop draws inside an active crop box — this one traces the
-  // current base photo's full bounds so it's useful while framing a shot
-  // even when not cropping.
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !showGrid || !hasImage || cropMode) {
-      if (compositionGridRef.current.length) {
-        compositionGridRef.current.forEach((line) => canvas?.remove(line));
-        compositionGridRef.current = [];
-        canvas?.requestRenderAll();
-      }
-      return;
-    }
+  const layerMeta = useMemo<LayerMeta[]>(
+    () => layers.map((l) => ({ id: l.id, name: l.name, type: l.type, visible: l.visible })),
+    [layers],
+  );
 
-    const baseId = baseImageLayerIdRef.current;
-    const baseObj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
-    if (!baseObj) return;
-
-    const bounds = {
-      left: baseObj.left ?? 0,
-      top: baseObj.top ?? 0,
-      width: baseObj.getScaledWidth(),
-      height: baseObj.getScaledHeight(),
-    };
-    const lineOptions = {
-      stroke: "rgba(248, 250, 252, 0.4)",
-      strokeWidth: 1,
-      selectable: false,
-      evented: false,
-      excludeFromExport: true,
-    };
-    const lines = [
-      new Line(
-        [bounds.left + bounds.width / 3, bounds.top, bounds.left + bounds.width / 3, bounds.top + bounds.height],
-        lineOptions,
-      ),
-      new Line(
-        [
-          bounds.left + (bounds.width * 2) / 3,
-          bounds.top,
-          bounds.left + (bounds.width * 2) / 3,
-          bounds.top + bounds.height,
-        ],
-        lineOptions,
-      ),
-      new Line(
-        [bounds.left, bounds.top + bounds.height / 3, bounds.left + bounds.width, bounds.top + bounds.height / 3],
-        lineOptions,
-      ),
-      new Line(
-        [
-          bounds.left,
-          bounds.top + (bounds.height * 2) / 3,
-          bounds.left + bounds.width,
-          bounds.top + (bounds.height * 2) / 3,
-        ],
-        lineOptions,
-      ),
-    ];
-    lines.forEach((line) => canvas.add(line));
-    compositionGridRef.current = lines;
-    canvas.requestRenderAll();
-
-    return () => {
-      lines.forEach((line) => canvas.remove(line));
-      if (compositionGridRef.current === lines) compositionGridRef.current = [];
-      canvas.requestRenderAll();
-    };
-  }, [showGrid, hasImage, cropMode, documentSize]);
-
-  const toggleBeforeAfter = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    setBeforeAfter((prev) => {
-      const next = !prev;
-      (canvas.getObjects() as LayerObject[]).forEach((layerObj) => {
-        if (!(layerObj instanceof FabricImage)) return;
-        const obj = layerObj as FabricImage & LayerObject;
-        if (next) {
-          obj.filters = [];
-          obj.globalCompositeOperation = "source-over";
-        } else {
-          const state = obj.layerId ? filterStateByLayer[obj.layerId] : undefined;
-          if (state) {
-            obj.filters = buildFabricFilters(state);
-            obj.globalCompositeOperation = BLEND_MODE_TO_COMPOSITE_OPERATION[state.blendMode];
-          }
-        }
-        obj.applyFilters();
-      });
-      canvas.requestRenderAll();
-      return next;
-    });
-  }, [filterStateByLayer]);
-
-  const exportImage = useCallback(async ({ format, multiplier }: { format: ExportFormat; multiplier: number }) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // The canvas is now larger than the document (see MAX_CANVAS_INSET) so
-    // handles have room around the photo — export only the base photo's own
-    // bounds, or that inset margin would show up as a solid-color border
-    // baked into the downloaded file.
-    const baseId = baseImageLayerIdRef.current;
-    const baseObj = baseId ? layerObjectsRef.current.get(baseId) : undefined;
-    const bounds =
-      baseObj instanceof FabricImage
-        ? { left: baseObj.left ?? 0, top: baseObj.top ?? 0, width: baseObj.getScaledWidth(), height: baseObj.getScaledHeight() }
-        : undefined;
-    const blob = await canvas.toBlob({ format, multiplier, quality: 0.92, ...bounds });
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `creativeflow-export.${format === "jpeg" ? "jpg" : "png"}`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  }, []);
-
-  // --- Landing-page hand-off: auto-load + activate the chosen tool ------
-  // Refs (rather than the callbacks themselves) back the second effect below
-  // so it only re-runs when hasImage actually flips — enterCropMode's own
-  // identity changes the instant activeLayerObject updates (i.e. the moment
-  // the image finishes loading), which would otherwise re-fire this effect
-  // immediately after it already ran. Synced from an effect (not during
-  // render) since mutating a ref while rendering isn't safe.
+  // --- Landing-page hand-off: auto-load + surface the chosen tool's status ---
+  const loadImageFromFileRef = useRef(loadImageFromFile);
   const enterCropModeRef = useRef(enterCropMode);
   const enterHealModeRef = useRef(enterHealMode);
   const setDrawingToolRef = useRef(setDrawingTool);
-  const loadImageFromFileRef = useRef(loadImageFromFile);
   useEffect(() => {
+    loadImageFromFileRef.current = loadImageFromFile;
     enterCropModeRef.current = enterCropMode;
     enterHealModeRef.current = enterHealMode;
     setDrawingToolRef.current = setDrawingTool;
-    loadImageFromFileRef.current = loadImageFromFile;
   });
-
-  // Re-populated (not consumed) on every registeredCanvas change, including
-  // the throwaway remount React's dev Strict Mode does on initial mount —
-  // that way whichever canvas ends up being the real one still sees it.
   const pendingIntentRef = useRef<EditIntentId | null>(null);
 
   useEffect(() => {
-    if (!registeredCanvas || !initialImageFile) return;
+    if (!initialImageFile) return;
     pendingIntentRef.current = initialTool;
     void loadImageFromFileRef.current(initialImageFile);
-  }, [registeredCanvas, initialImageFile, initialTool]);
+    // Runs once per handed-off file — intentionally not re-triggered by
+    // later renders of this same provider instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialImageFile]);
 
-  // Waits for hasImage to actually commit (rather than chaining off
-  // loadImageFromFile's promise directly) so activeLayerObject/hasImage are
-  // guaranteed fresh by the time the intent-specific tool activates.
   useEffect(() => {
     if (!hasImage || !pendingIntentRef.current) return;
     const intent = pendingIntentRef.current;
@@ -1356,43 +1029,54 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
     }
   }, [hasImage]);
 
-  const activeFilterState = useMemo(
-    () => (activeLayerId ? filterStateByLayer[activeLayerId] ?? DEFAULT_FILTER_STATE : DEFAULT_FILTER_STATE),
-    [activeLayerId, filterStateByLayer],
-  );
-
   const value = useMemo<CanvasEngineContextValue>(
     () => ({
-      registerCanvas,
-      unregisterCanvas,
       notifyContainerResize,
       hasImage,
       isImageLoading,
       documentSize,
-      layers,
+      layers: layerMeta,
+      engineLayers: layers,
       activeLayerId,
+      activeLayerIsBase: activeLayerId !== null && activeLayerId === baseLayerId,
       selectLayer,
+      deselectLayer,
       toggleLayerVisibility,
       deleteLayer,
       reorderLayer,
+      duplicateLayer,
+      toggleLayerLock,
+      updateLayerTransform,
       loadImageFromFile,
+      addImageLayer,
+      addTextWatermark,
+      resizeDocument,
+      getLayerThumbnail,
+      pendingAssets,
+      addPendingAsset,
+      placePendingAsset,
+      removePendingAsset,
       isAutoCleaning,
       autoCleanPreview,
       autoCleanMessage,
+      autoCleanEllipsePreview,
       startAutoClean,
       applyAutoClean,
       cancelAutoClean,
-      healMode,
-      hasHealStrokes,
+      healMode: false,
+      hasHealStrokes: false,
       enterHealMode,
       cancelHealMode,
       applyHealMode,
       activeFilterState,
       setExposure,
       setContrast,
+      setSaturation,
       setBlendMode,
       setCurvePoint,
       commitHistorySnapshot,
+      activeLayerOpacity,
+      setOpacity,
       history,
       historyIndex,
       jumpToHistory,
@@ -1404,24 +1088,38 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       enterCropMode,
       cancelCropMode,
       applyCrop,
-      cropPixelSize: crop.pixelSize,
-      cropAspectLocked: crop.aspectLocked,
-      setCropAspectLocked: crop.setAspectLocked,
-      cropPreset: crop.preset,
-      applyCropPreset: crop.applyPreset,
-      setCropWidthPx: crop.setWidthPx,
-      setCropHeightPx: crop.setHeightPx,
-      cropBadgeRect: crop.badgeRect,
+      resetCrop,
+      cropRect: cropSession?.cropRect ?? null,
+      cropImageBox: cropSession?.imageBox ?? null,
+      cropLayerId: cropSession?.layerId ?? null,
+      cropPixelSize,
+      cropOffsetPx,
+      cropAspectLocked: cropSession?.aspectLocked ?? false,
+      setCropAspectLocked,
+      cropPreset: cropSession?.preset ?? "free",
+      applyCropPreset,
+      setCropWidthPx,
+      setCropHeightPx,
+      setCropXPx,
+      setCropYPx,
+      cropBadgeRect,
+      beginCropHandleDrag,
+      beginCropBodyDrag,
+      updateCropDrag,
+      endCropDrag,
       beforeAfter,
       toggleBeforeAfter,
+      beforeAfterBitmap,
       exportImage,
       drawingTool,
       setDrawingTool,
       brushColor,
-      setBrushColor: handleSetBrushColor,
+      setBrushColor,
       brushWidth,
-      setBrushWidth: handleSetBrushWidth,
-      zoom,
+      setBrushWidth,
+      viewport,
+      setViewport,
+      zoom: viewport.zoom,
       setZoom,
       zoomIn,
       zoomOut,
@@ -1429,38 +1127,53 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       centerCanvas,
       showGrid,
       toggleGrid,
+      notice,
     }),
     [
-      registerCanvas,
-      unregisterCanvas,
       notifyContainerResize,
       hasImage,
       isImageLoading,
       documentSize,
+      layerMeta,
       layers,
       activeLayerId,
+      baseLayerId,
       selectLayer,
+      deselectLayer,
       toggleLayerVisibility,
       deleteLayer,
       reorderLayer,
+      duplicateLayer,
+      toggleLayerLock,
+      updateLayerTransform,
       loadImageFromFile,
+      addImageLayer,
+      addTextWatermark,
+      resizeDocument,
+      getLayerThumbnail,
+      pendingAssets,
+      addPendingAsset,
+      placePendingAsset,
+      removePendingAsset,
       isAutoCleaning,
       autoCleanPreview,
       autoCleanMessage,
+      autoCleanEllipsePreview,
       startAutoClean,
       applyAutoClean,
       cancelAutoClean,
-      healMode,
-      hasHealStrokes,
       enterHealMode,
       cancelHealMode,
       applyHealMode,
       activeFilterState,
       setExposure,
       setContrast,
+      setSaturation,
       setBlendMode,
       setCurvePoint,
       commitHistorySnapshot,
+      activeLayerOpacity,
+      setOpacity,
       history,
       historyIndex,
       jumpToHistory,
@@ -1472,17 +1185,31 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       enterCropMode,
       cancelCropMode,
       applyCrop,
-      crop,
+      resetCrop,
+      cropSession,
+      cropPixelSize,
+      cropOffsetPx,
+      setCropAspectLocked,
+      applyCropPreset,
+      setCropWidthPx,
+      setCropHeightPx,
+      setCropXPx,
+      setCropYPx,
+      cropBadgeRect,
+      beginCropHandleDrag,
+      beginCropBodyDrag,
+      updateCropDrag,
+      endCropDrag,
       beforeAfter,
       toggleBeforeAfter,
+      beforeAfterBitmap,
       exportImage,
       drawingTool,
       setDrawingTool,
       brushColor,
-      handleSetBrushColor,
       brushWidth,
-      handleSetBrushWidth,
-      zoom,
+      viewport,
+      setViewport,
       setZoom,
       zoomIn,
       zoomOut,
@@ -1490,6 +1217,7 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       centerCanvas,
       showGrid,
       toggleGrid,
+      notice,
     ],
   );
 

@@ -10,20 +10,21 @@ import {
   type DragEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import {
   Captions,
+  Clapperboard,
+  CloudUpload,
   Crop,
   Eraser,
   FileArchive,
   Film,
-  ImageIcon,
+  Images,
   Layers,
   Loader2,
   Palette,
   Plus,
   Scissors,
-  UploadCloud,
-  Video,
   X,
 } from "lucide-react";
 import {
@@ -32,55 +33,135 @@ import {
   type MediaKind,
 } from "@/lib/landing/mediaValidation";
 import { saveAsset } from "@/lib/landing/assetStore";
+import { generateUUID } from "@/lib/landing/uuid";
 import Toast from "./Toast";
 
 const MAX_ITEMS = 5;
 
-const MODE_TABS: { key: MediaKind; label: string; Icon: typeof ImageIcon }[] = [
-  { key: "image", label: "Image Mode", Icon: ImageIcon },
-  { key: "video", label: "Video Mode", Icon: Video },
+const MODE_TABS: { key: MediaKind; label: string; Icon: typeof Images }[] = [
+  { key: "image", label: "Image Mode", Icon: Images },
+  { key: "video", label: "Video Mode", Icon: Clapperboard },
 ];
 
-const IMAGE_QUICK_ACTIONS = [
-  { label: "Crop & Resize", Icon: Crop, href: "/crop-resize" },
-  { label: "Remove Background", Icon: Layers, href: "/background-remover" },
-  { label: "Watermark Remover", Icon: Eraser, href: "/watermark-remover" },
-  { label: "Color Grade", Icon: Palette, href: "/color-grade", soon: true },
+const TOOL_ACCENTS = {
+  blue: {
+    icon: "bg-blue-500/15 text-blue-400 group-hover:bg-blue-500 group-hover:text-white",
+    hover: "hover:border-blue-500/50 hover:bg-blue-500/[0.06] hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]",
+  },
+  purple: {
+    icon: "bg-purple-500/15 text-purple-400 group-hover:bg-purple-500 group-hover:text-white",
+    hover: "hover:border-purple-500/50 hover:bg-purple-500/[0.06] hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]",
+  },
+  emerald: {
+    icon: "bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white",
+    hover: "hover:border-emerald-500/50 hover:bg-emerald-500/[0.06] hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]",
+  },
+  amber: {
+    icon: "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500 group-hover:text-white",
+    hover: "hover:border-amber-500/50 hover:bg-amber-500/[0.06] hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]",
+  },
+} as const;
+
+type ToolAccent = keyof typeof TOOL_ACCENTS;
+
+interface QuickAction {
+  label: string;
+  description: string;
+  Icon: typeof Crop;
+  href: string;
+  accent: ToolAccent;
+  soon?: boolean;
+}
+
+const IMAGE_QUICK_ACTIONS: QuickAction[] = [
+  {
+    label: "Crop & Resize",
+    description: "Adjust dimensions and aspect ratio",
+    Icon: Crop,
+    href: "/crop-resize",
+    accent: "blue",
+  },
+  {
+    label: "Remove Background",
+    description: "Precision subject cutout",
+    Icon: Layers,
+    href: "/background-remover",
+    accent: "purple",
+  },
+  {
+    label: "Watermark Remover",
+    description: "Clean up unwanted overlays",
+    Icon: Eraser,
+    href: "/watermark-remover",
+    accent: "emerald",
+  },
+  {
+    label: "Color Grade",
+    description: "Fine-tune tone, contrast & hue",
+    Icon: Palette,
+    href: "/color-grade",
+    accent: "amber",
+    soon: true,
+  },
 ];
 
-const VIDEO_QUICK_ACTIONS = [
-  { label: "Trim & Cut", Icon: Scissors, href: "/trim-cut", soon: true },
-  { label: "Compress", Icon: FileArchive, href: "/compress-video", soon: true },
-  { label: "Add Subtitles", Icon: Captions, href: "/add-subtitles", soon: true },
+const VIDEO_QUICK_ACTIONS: QuickAction[] = [
+  {
+    label: "Trim & Cut",
+    description: "Precision timeline editing",
+    Icon: Scissors,
+    href: "/trim-cut",
+    accent: "blue",
+    soon: true,
+  },
+  {
+    label: "Compress",
+    description: "Shrink file size, keep quality",
+    Icon: FileArchive,
+    href: "/compress-video",
+    accent: "emerald",
+    soon: true,
+  },
+  {
+    label: "Add Subtitles",
+    description: "Auto-generate & burn in captions",
+    Icon: Captions,
+    href: "/add-subtitles",
+    accent: "purple",
+    soon: true,
+  },
 ];
 
 const MODE_ACCENT = {
   image: {
-    border: "border-blue-500/80",
-    glow: "shadow-[0_0_35px_rgba(59,130,246,0.3)]",
-    glowDrag: "shadow-[0_0_50px_rgba(59,130,246,0.55)]",
-    idleGlow: "shadow-[0_0_25px_rgba(59,130,246,0.3)]",
+    borderBg: "bg-blue-500/40",
+    idleGlow: "shadow-[0_0_22px_rgba(59,130,246,0.22)]",
     bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(37,99,235,0.22),transparent_60%)]",
-    iconBox: "bg-blue-600/20 border border-blue-500/30",
-    iconGlow: "shadow-[0_0_24px_rgba(59,130,246,0.35)]",
-    text: "text-blue-400 underline decoration-blue-400 underline-offset-4",
+    iconBox: "bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-blue-400/40",
+    iconGlow: "shadow-[0_0_16px_rgba(59,130,246,0.4)]",
+    text: "text-blue-400 underline decoration-blue-400/70 underline-offset-4 transition-colors duration-200 hover:text-blue-300",
     pillActive: "scale-105 bg-blue-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]",
+    tooltipBorder: "border-blue-500/40",
+    tooltipGlow: "shadow-[0_12px_32px_-8px_rgba(59,130,246,0.5)]",
+    tooltipIconBox: "bg-blue-500/15 text-blue-400",
   },
   video: {
-    border: "border-purple-500/80",
-    glow: "shadow-[0_0_35px_rgba(168,85,247,0.3)]",
-    glowDrag: "shadow-[0_0_50px_rgba(168,85,247,0.55)]",
-    idleGlow: "shadow-[0_0_25px_rgba(168,85,247,0.3)]",
+    borderBg: "bg-purple-500/40",
+    idleGlow: "shadow-[0_0_22px_rgba(168,85,247,0.22)]",
     bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(168,85,247,0.22),transparent_60%)]",
-    iconBox: "bg-purple-600/20 border border-purple-500/30",
-    iconGlow: "shadow-[0_0_24px_rgba(168,85,247,0.35)]",
-    text: "text-purple-400 underline decoration-purple-400 underline-offset-4",
+    iconBox: "bg-gradient-to-br from-purple-500 to-purple-600 border-2 border-purple-400/40",
+    iconGlow: "shadow-[0_0_16px_rgba(168,85,247,0.4)]",
+    text: "text-purple-400 underline decoration-purple-400/70 underline-offset-4 transition-colors duration-200 hover:text-purple-300",
     pillActive: "scale-105 bg-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)]",
+    tooltipBorder: "border-purple-500/40",
+    tooltipGlow: "shadow-[0_12px_32px_-8px_rgba(168,85,247,0.5)]",
+    tooltipIconBox: "bg-purple-500/15 text-purple-400",
   },
 } as const satisfies Record<MediaKind, Record<string, string>>;
 
-/** Neon blue-to-pink gradient stroke shown on the empty dropzone's hover/drag-over state. */
-const HOVER_GRADIENT_BORDER = "linear-gradient(90deg, #3b82f6, #6366f1, #ec4899) 1";
+/** Neon blue-to-pink gradient stroke shown on the empty dropzone's hover/drag-over state.
+ *  Applied as a background (not border-image) so the rounded corners are preserved. */
+const HOVER_GRADIENT_BORDER_BG = "bg-gradient-to-r from-blue-500 via-indigo-500 to-pink-500";
 const HOVER_GLOW = "shadow-[0_0_40px_rgba(59,130,246,0.35),0_0_55px_rgba(236,72,153,0.28)]";
 
 const SUBTEXT_BY_KIND: Record<MediaKind, string> = {
@@ -107,31 +188,49 @@ function formatLabel(file: File): string {
   return subtype ? subtype.toUpperCase() : "FILE";
 }
 
-export default function StudioPanel() {
+export default function StudioPanel({
+  mode,
+  onModeChange,
+}: {
+  mode: MediaKind;
+  onModeChange: (next: MediaKind) => void;
+}) {
   const router = useRouter();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
-  const mediaListRef = useRef<MediaItem[]>([]);
+  const mediaByModeRef = useRef<Record<MediaKind, MediaItem[]>>({ image: [], video: [] });
 
-  const [mode, setMode] = useState<MediaKind>("image");
   const [isDragActive, setIsDragActive] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
-  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Each mode keeps its own uploaded files and selection, so switching
+  // modes never discards what was already picked — switching back just
+  // shows that mode's tray again.
+  const [mediaByMode, setMediaByMode] = useState<Record<MediaKind, MediaItem[]>>({
+    image: [],
+    video: [],
+  });
+  const [activeIdByMode, setActiveIdByMode] = useState<Record<MediaKind, string | null>>({
+    image: null,
+    video: null,
+  });
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const mediaList = mediaByMode[mode];
+  const activeId = activeIdByMode[mode];
   const activeItem = mediaList.find((item) => item.id === activeId) ?? null;
   const hasMedia = mediaList.length > 0;
 
   useEffect(() => {
-    mediaListRef.current = mediaList;
-  }, [mediaList]);
+    mediaByModeRef.current = mediaByMode;
+  }, [mediaByMode]);
 
   useEffect(() => {
     return () => {
-      mediaListRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      Object.values(mediaByModeRef.current)
+        .flat()
+        .forEach((item) => URL.revokeObjectURL(item.previewUrl));
     };
   }, []);
 
@@ -157,7 +256,7 @@ export default function StudioPanel() {
           continue;
         }
         accepted.push({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           file,
           kind: mode,
           previewUrl: URL.createObjectURL(file),
@@ -172,8 +271,8 @@ export default function StudioPanel() {
           `Only added ${accepted.length} file${accepted.length === 1 ? "" : "s"} — the ${MAX_ITEMS}-file limit was reached.`,
         );
       }
-      setMediaList((prev) => [...prev, ...accepted]);
-      setActiveId((prev) => prev ?? accepted[0].id);
+      setMediaByMode((prev) => ({ ...prev, [mode]: [...prev[mode], ...accepted] }));
+      setActiveIdByMode((prev) => ({ ...prev, [mode]: prev[mode] ?? accepted[0].id }));
     },
     [isBusy, mode, mediaList.length, showError],
   );
@@ -181,14 +280,9 @@ export default function StudioPanel() {
   const handleModeChange = useCallback(
     (next: MediaKind) => {
       if (isBusy || next === mode) return;
-      setMediaList((prev) => {
-        prev.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-        return [];
-      });
-      setActiveId(null);
-      setMode(next);
+      onModeChange(next);
     },
-    [isBusy, mode],
+    [isBusy, mode, onModeChange],
   );
 
   const openFileDialog = useCallback(() => {
@@ -238,50 +332,56 @@ export default function StudioPanel() {
     (id: string) => {
       const item = mediaList.find((entry) => entry.id === id);
       if (item) URL.revokeObjectURL(item.previewUrl);
-      setMediaList((prev) => prev.filter((entry) => entry.id !== id));
-      setActiveId((prev) => {
-        if (prev !== id) return prev;
+      setMediaByMode((prev) => ({ ...prev, [mode]: prev[mode].filter((entry) => entry.id !== id) }));
+      setActiveIdByMode((prev) => {
+        if (prev[mode] !== id) return prev;
         const remaining = mediaList.filter((entry) => entry.id !== id);
-        return remaining[0]?.id ?? null;
+        return { ...prev, [mode]: remaining[0]?.id ?? null };
       });
     },
-    [mediaList],
+    [mediaList, mode],
   );
 
   const handleClearAll = useCallback(() => {
-    setMediaList((prev) => {
-      prev.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-      return [];
-    });
-    setActiveId(null);
-  }, []);
+    mediaList.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setMediaByMode((prev) => ({ ...prev, [mode]: [] }));
+    setActiveIdByMode((prev) => ({ ...prev, [mode]: null }));
+  }, [mediaList, mode]);
 
-  const handleImageLoad = useCallback((id: string, img: HTMLImageElement) => {
-    setMediaList((prev) =>
-      prev.map((item) =>
-        item.id === id && item.width == null
-          ? { ...item, width: img.naturalWidth, height: img.naturalHeight }
-          : item,
-      ),
-    );
-  }, []);
+  const handleImageLoad = useCallback(
+    (id: string, img: HTMLImageElement) => {
+      setMediaByMode((prev) => ({
+        ...prev,
+        [mode]: prev[mode].map((item) =>
+          item.id === id && item.width == null
+            ? { ...item, width: img.naturalWidth, height: img.naturalHeight }
+            : item,
+        ),
+      }));
+    },
+    [mode],
+  );
 
-  const handleVideoLoad = useCallback((id: string, video: HTMLVideoElement) => {
-    setMediaList((prev) =>
-      prev.map((item) =>
-        item.id === id && item.width == null
-          ? { ...item, width: video.videoWidth, height: video.videoHeight }
-          : item,
-      ),
-    );
-  }, []);
+  const handleVideoLoad = useCallback(
+    (id: string, video: HTMLVideoElement) => {
+      setMediaByMode((prev) => ({
+        ...prev,
+        [mode]: prev[mode].map((item) =>
+          item.id === id && item.width == null
+            ? { ...item, width: video.videoWidth, height: video.videoHeight }
+            : item,
+        ),
+      }));
+    },
+    [mode],
+  );
 
   const handleQuickAction = useCallback(
     async (href: string, soon?: boolean) => {
       if (!activeItem || soon || isBusy) return;
       setIsBusy(true);
       try {
-        const assetId = crypto.randomUUID();
+        const assetId = generateUUID();
         await saveAsset(assetId, activeItem.file);
         router.push(`${href}?assetId=${assetId}`);
       } catch {
@@ -292,19 +392,27 @@ export default function StudioPanel() {
     [activeItem, isBusy, router, showError],
   );
 
-  const cardClass = (disabled: boolean) =>
-    `flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3 text-center transition-all ${
+  const cardClass = (disabled: boolean, toolAccent: ToolAccent) =>
+    `group flex w-full items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-all duration-200 ${
       disabled
         ? "cursor-not-allowed border-slate-800 bg-slate-900/40 opacity-50"
-        : "cursor-pointer border-slate-700 bg-slate-800/60 hover:border-blue-500/50 hover:bg-blue-600/10"
+        : `cursor-pointer border-slate-700/70 bg-slate-800/40 hover:scale-[1.02] ${TOOL_ACCENTS[toolAccent].hover}`
     }`;
 
   const accent = MODE_ACCENT[mode];
 
-  const showHoverGradient = !hasMedia && (isDragActive || isHovering);
+  const showHoverGradient = isDragActive || isHovering;
 
   return (
-    <div className={`relative mx-auto w-full max-w-4xl ${hasMedia ? "pb-16" : "pt-16"}`}>
+    <div className="relative mx-auto w-full max-w-4xl pt-17.75">
+      {/* Ambient pulsing neon glow behind the dropzone card */}
+      <div
+        aria-hidden
+        className={`animate-neon-glow-pulse pointer-events-none absolute inset-x-6 top-17.75 -z-10 h-[420px] rounded-[32px] ${
+          mode === "image" ? "bg-blue-500/40" : "bg-purple-500/40"
+        }`}
+      />
+
       <div
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -312,18 +420,9 @@ export default function StudioPanel() {
         onDrop={handleDrop}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
-        style={showHoverGradient ? { borderImage: HOVER_GRADIENT_BORDER, borderStyle: "solid" } : undefined}
-        className={`relative h-[420px] w-full rounded-3xl border-2 backdrop-blur-md transition-all duration-300 ease-in-out ${
-          hasMedia ? "bg-slate-950/70" : "bg-slate-950"
-        } ${accent.border} ${
-          hasMedia
-            ? isDragActive || isHovering
-              ? accent.glowDrag
-              : accent.glow
-            : showHoverGradient
-              ? HOVER_GLOW
-              : accent.idleGlow
-        }`}
+        className={`relative h-[420px] w-full rounded-3xl p-0.5 transition-all duration-300 ease-in-out ${
+          showHoverGradient ? HOVER_GRADIENT_BORDER_BG : accent.borderBg
+        } ${showHoverGradient ? HOVER_GLOW : accent.idleGlow}`}
       >
         <input
           ref={inputRef}
@@ -336,7 +435,11 @@ export default function StudioPanel() {
           onChange={handleInputChange}
         />
 
-        <div className="relative h-full w-full overflow-hidden rounded-[22px]">
+        <div
+          className={`relative h-full w-full overflow-hidden rounded-[calc(1.5rem-2px)] backdrop-blur-md ${
+            hasMedia ? "bg-slate-950/70" : "bg-slate-950"
+          }`}
+        >
           {mediaList.length === 0 ? (
             <div
               role="button"
@@ -350,61 +453,86 @@ export default function StudioPanel() {
                   openFileDialog();
                 }
               }}
-              className={`relative flex h-full flex-col items-center justify-center gap-4 overflow-hidden p-6 text-center outline-none ${
-                isBusy ? "cursor-progress opacity-70" : "cursor-pointer"
+              className={`relative flex h-full flex-col items-center justify-center gap-6 overflow-hidden px-6 py-10 text-center outline-none ${
+                isBusy ? "cursor-progress" : "cursor-pointer"
               }`}
             >
               <div aria-hidden className={`pointer-events-none absolute inset-0 ${accent.bgGlow}`} />
 
-              <div className="relative flex h-16 w-16 items-center justify-center">
+              <div
+                aria-hidden
+                className={`pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white/6 backdrop-blur-2xl ring-1 ring-inset ring-white/15 transition-all duration-200 ${
+                  isDragActive ? "opacity-100" : "opacity-0"
+                }`}
+              >
                 <div
                   aria-hidden
-                  className={`absolute inset-0 animate-pulse rounded-2xl ${accent.iconGlow}`}
+                  className="pointer-events-none absolute inset-0 bg-linear-to-b from-white/10 via-transparent to-transparent"
                 />
                 <div
                   className={`relative flex h-16 w-16 items-center justify-center rounded-2xl text-white ${accent.iconBox} ${accent.iconGlow}`}
                 >
-                {isBusy ? (
-                  <Loader2 size={28} className="animate-spin" />
-                ) : mode === "image" ? (
-                  <UploadCloud size={28} />
-                ) : (
-                  <Film size={28} />
-                )}
+                  {mode === "image" ? <CloudUpload size={28} /> : <Film size={28} />}
                 </div>
-              </div>
-
-              <div className="relative">
-                <p className="text-base font-semibold text-white">
-                  {isBusy ? (
-                    "Loading…"
-                  ) : mode === "image" ? (
-                    <>
-                      Drag &amp; drop your <span className={accent.text}>images</span> here, or{" "}
-                      <span className={accent.text}>click to browse</span>
-                    </>
-                  ) : (
-                    <>
-                      Drag &amp; drop your <span className={accent.text}>videos</span> here, or{" "}
-                      <span className={accent.text}>click to browse</span>
-                    </>
-                  )}
-                </p>
-
-                <p id={`${inputId}-hint`} className="mt-1.5 text-xs tracking-wide text-slate-500">
-                  {SUBTEXT_BY_KIND[mode]}
+                <p className="relative text-xl font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.5)]">
+                  Drop {mode === "image" ? "images" : "videos"} here
                 </p>
               </div>
 
-              <div className="relative flex flex-wrap items-center justify-center gap-1.5">
-                {FORMAT_CHIPS_BY_KIND[mode].map((chip) => (
-                  <span
-                    key={chip}
-                    className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-300"
+              <div
+                className={`relative flex h-full w-full flex-col items-center justify-center gap-6 transition-opacity duration-200 ${
+                  isDragActive ? "opacity-0" : isBusy ? "opacity-70" : "opacity-100"
+                }`}
+              >
+                <div className="relative flex h-20 w-20 items-center justify-center">
+                  <motion.div
+                    animate={{ scale: isDragActive ? 1.1 : 1 }}
+                    whileHover={isBusy ? undefined : { scale: 1.12, y: -3 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                    className={`flex h-20 w-20 items-center justify-center rounded-2xl text-white ${accent.iconBox} ${accent.iconGlow}`}
                   >
-                    {chip}
-                  </span>
-                ))}
+                    {isBusy ? (
+                      <Loader2 size={32} className="animate-spin" />
+                    ) : mode === "image" ? (
+                      <CloudUpload size={32} />
+                    ) : (
+                      <Film size={32} />
+                    )}
+                  </motion.div>
+                </div>
+
+                <div className="relative">
+                  <p className="text-xl font-semibold text-slate-100 sm:text-2xl">
+                    {isBusy ? (
+                      "Loading…"
+                    ) : mode === "image" ? (
+                      <>
+                        Drag &amp; drop your images here, or{" "}
+                        <span className={accent.text}>click to browse</span>
+                      </>
+                    ) : (
+                      <>
+                        Drag &amp; drop your videos here, or{" "}
+                        <span className={accent.text}>click to browse</span>
+                      </>
+                    )}
+                  </p>
+
+                  <p id={`${inputId}-hint`} className="mt-2 text-sm text-slate-400">
+                    {SUBTEXT_BY_KIND[mode]}
+                  </p>
+                </div>
+
+                <div className="relative flex flex-wrap items-center justify-center gap-2">
+                  {FORMAT_CHIPS_BY_KIND[mode].map((chip) => (
+                    <span
+                      key={chip}
+                      className="rounded-full border-2 border-slate-700/50 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-300 transition-transform duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-sm"
+                    >
+                      {chip}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -412,7 +540,7 @@ export default function StudioPanel() {
             {/* Left pane — canvas + carousel */}
             <div className="relative flex h-full w-full min-h-0 flex-col justify-between overflow-hidden bg-black/40 p-4 md:col-span-7">
               {activeItem && (
-                <div className="absolute left-3 top-3 z-10 rounded-md border border-slate-700/60 bg-slate-900/80 px-2.5 py-1 font-mono text-[10px] text-slate-300 backdrop-blur-md">
+                <div className="absolute left-3 top-3 z-10 rounded-md border-2 border-slate-700/60 bg-slate-900/80 px-2.5 py-1 font-mono text-[10px] text-slate-300 backdrop-blur-md">
                   {activeItem.width && activeItem.height ? `${activeItem.width} × ${activeItem.height} • ` : ""}
                   {formatLabel(activeItem.file)}
                 </div>
@@ -422,7 +550,7 @@ export default function StudioPanel() {
                 type="button"
                 aria-label="Clear all"
                 onClick={handleClearAll}
-                className="absolute right-3 top-3 z-10 rounded-lg border border-slate-700/60 bg-slate-900/80 p-1.5 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                className="absolute right-3 top-3 z-10 rounded-lg border-2 border-slate-700/60 bg-slate-900/80 p-1.5 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
               >
                 <X size={14} />
               </button>
@@ -451,23 +579,26 @@ export default function StudioPanel() {
 
               <div
                 data-accent={mode}
-                className="custom-scrollbar flex w-full items-center gap-2 overflow-x-auto border-t border-slate-800/60 pt-2"
+                className="custom-scrollbar flex w-full items-center gap-2 overflow-x-auto border-t-2 border-slate-800/60 pt-2"
               >
                 {mediaList.map((item) => (
-                  <div
+                  <motion.div
                     key={item.id}
+                    initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
                     role="button"
                     tabIndex={0}
                     aria-label={`Show ${item.file.name}`}
                     aria-pressed={item.id === activeId}
-                    onClick={() => setActiveId(item.id)}
+                    onClick={() => setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        setActiveId(item.id);
+                        setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }));
                       }
                     }}
-                    className={`relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border outline-none ${
+                    className={`relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 outline-none ${
                       item.id === activeId
                         ? "border-blue-500 ring-2 ring-blue-500/30"
                         : "border-slate-700 hover:border-slate-600"
@@ -494,7 +625,7 @@ export default function StudioPanel() {
                     >
                       <X size={10} />
                     </button>
-                  </div>
+                  </motion.div>
                 ))}
 
                 {mediaList.length < MAX_ITEMS && (
@@ -503,7 +634,7 @@ export default function StudioPanel() {
                     onClick={openFileDialog}
                     disabled={isBusy}
                     aria-label="Add more files"
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-700 text-slate-500 transition-colors hover:border-blue-500/50 hover:text-blue-400 disabled:opacity-50"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-slate-500 transition-colors hover:border-blue-500/50 hover:text-blue-400 disabled:opacity-50"
                   >
                     <Plus size={16} />
                   </button>
@@ -518,9 +649,9 @@ export default function StudioPanel() {
             >
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Edit Tools
+                  Select Feature
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-2">
                   {(mode === "image" ? IMAGE_QUICK_ACTIONS : VIDEO_QUICK_ACTIONS).map((action) => {
                     const disabled = !activeItem || isBusy || Boolean(action.soon);
                     return (
@@ -530,24 +661,29 @@ export default function StudioPanel() {
                         onClick={() => handleQuickAction(action.href, action.soon)}
                         disabled={disabled}
                         title={action.soon ? "Coming soon" : undefined}
-                        className={cardClass(disabled)}
+                        className={cardClass(disabled, action.accent)}
                       >
                         <span
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                            disabled ? "bg-slate-800 text-slate-500" : "bg-blue-600/15 text-blue-400"
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ${
+                            disabled ? "bg-slate-800 text-slate-500" : TOOL_ACCENTS[action.accent].icon
                           }`}
                         >
                           {isBusy && !action.soon ? (
-                            <Loader2 size={15} className="animate-spin" />
+                            <Loader2 size={17} className="animate-spin" />
                           ) : (
-                            <action.Icon size={15} />
+                            <action.Icon size={17} />
                           )}
                         </span>
-                        <span className="text-[11px] font-medium leading-tight text-white">
-                          {action.label}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold leading-tight text-white">
+                            {action.label}
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs leading-tight text-slate-400">
+                            {action.description}
+                          </span>
                         </span>
                         {action.soon && (
-                          <span className="rounded-full bg-slate-700/60 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-slate-400">
+                          <span className="animate-pulse shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
                             Soon
                           </span>
                         )}
@@ -562,14 +698,9 @@ export default function StudioPanel() {
         </div>
       </div>
 
-      {/* Floating mode switcher pill — above the dropzone before upload, below the card once media is loaded */}
-      <div
-        className={`absolute left-1/2 z-20 -translate-x-1/2 ${hasMedia ? "bottom-0" : "top-0"}`}
-      >
-        <div
-          title={hasMedia ? "Clear your files to switch mode" : undefined}
-          className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/90 p-1.5 shadow-2xl backdrop-blur-xl"
-        >
+      {/* Floating mode switcher pill — always above the dropzone */}
+      <div className="absolute left-1/2 top-1.25 z-20 -translate-x-1/2">
+        <div className="flex items-center gap-2 rounded-full border-2 border-white/10 bg-slate-900/90 p-1.5 shadow-2xl backdrop-blur-xl">
           {MODE_TABS.map(({ key, label, Icon }, index) => {
             const active = mode === key;
             return (
@@ -580,7 +711,7 @@ export default function StudioPanel() {
                     type="button"
                     aria-label={label}
                     aria-pressed={active}
-                    disabled={hasMedia}
+                    disabled={isBusy}
                     onClick={() => handleModeChange(key)}
                     className={`flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                       active
@@ -593,11 +724,15 @@ export default function StudioPanel() {
 
                   <div
                     aria-hidden
-                    className="pointer-events-none absolute -top-12 left-1/2 flex -translate-x-1/2 translate-y-1 scale-95 items-center gap-1.5 whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/95 px-3 py-1.5 text-xs font-semibold text-white opacity-0 shadow-xl backdrop-blur-md transition-all duration-200 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100"
+                    className={`pointer-events-none absolute -top-14 left-1/2 flex -translate-x-1/2 translate-y-1 scale-95 items-center gap-2 whitespace-nowrap rounded-xl border-2 bg-gradient-to-b from-slate-800/95 to-slate-900/95 py-1.5 pl-1.5 pr-3.5 text-xs font-semibold text-slate-100 opacity-0 backdrop-blur-md transition-all duration-200 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 ${MODE_ACCENT[key].tooltipBorder} ${MODE_ACCENT[key].tooltipGlow}`}
                   >
-                    <Icon size={12} />
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-md ${MODE_ACCENT[key].tooltipIconBox}`}>
+                      <Icon size={12} />
+                    </span>
                     {label}
-                    <span className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-white/10 bg-slate-900" />
+                    <span
+                      className={`absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b-2 border-r-2 bg-slate-900 ${MODE_ACCENT[key].tooltipBorder}`}
+                    />
                   </div>
                 </div>
               </div>

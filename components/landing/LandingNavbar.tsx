@@ -120,11 +120,11 @@ export default function LandingNavbar() {
   }, [mobileOpen]);
 
   return (
-    <header className="sticky top-4 z-50 px-4 sm:top-6">
-      <div className="mx-auto max-w-5xl">
+    <header className="pointer-events-none fixed top-4 left-1/2 z-100 w-[calc(100%-2rem)] max-w-[calc(100%-2rem)] -translate-x-1/2 lg:w-fit">
+      <div className="pointer-events-auto">
         <div
           ref={navRef}
-          className="flex items-center justify-between rounded-full border border-white/10 bg-[#0F172A]/80 px-4 py-2.5 shadow-[0_25px_60px_-15px_rgba(0,102,255,0.25)] backdrop-blur-md sm:px-6 sm:py-3"
+          className="flex items-center justify-between gap-6 rounded-full border-2 border-slate-700/50 bg-slate-950/70 px-6 py-2.5 shadow-lg shadow-black/40 ring-1 ring-inset ring-white/5 backdrop-blur-lg backdrop-saturate-150 sm:gap-10"
         >
           <Link
             href="/"
@@ -195,7 +195,7 @@ export default function LandingNavbar() {
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileOpen}
               onClick={() => setMobileOpen((open) => !open)}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition-colors hover:text-white lg:hidden"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white/10 bg-white/5 text-slate-300 transition-colors hover:text-white lg:hidden"
             >
               {mobileOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
@@ -203,7 +203,7 @@ export default function LandingNavbar() {
         </div>
 
         {mobileOpen && (
-          <div className="mt-3 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-2xl border border-white/10 bg-[#0F172A]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-md lg:hidden">
+          <div className="mt-3 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-2xl border-2 border-white/10 bg-[#0F172A]/90 p-3 shadow-2xl shadow-black/40 backdrop-blur-2xl backdrop-saturate-150 lg:hidden">
             <MobileSection
               label="Video Tools"
               items={VIDEO_TOOLS}
@@ -288,7 +288,7 @@ function NavDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-1/2 top-full mt-3 w-80 -translate-x-1/2 rounded-2xl border border-white/10 bg-[#0F172A] p-2 shadow-2xl shadow-black/40">
+        <div className="absolute left-1/2 top-full mt-3 w-80 -translate-x-1/2 rounded-2xl border-2 border-white/10 bg-[#0F172A] p-2 shadow-2xl shadow-black/40">
           {items.map((item) => (
             <ToolMenuItem key={item.label} item={item} />
           ))}
@@ -353,7 +353,7 @@ function MobileSection({
   onNavigate: () => void;
 }) {
   return (
-    <div className="border-b border-white/10">
+    <div className="border-b-2 border-white/10">
       <button
         type="button"
         aria-expanded={isOpen}

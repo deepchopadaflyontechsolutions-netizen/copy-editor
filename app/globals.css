@@ -5,6 +5,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@theme {
+  --animate-neon-glow-pulse: neon-glow-pulse 2.5s ease-in-out infinite;
+  --animate-upload-progress: upload-progress 1.1s ease-in-out infinite;
+}
+
+@keyframes neon-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    filter: blur(16px);
+  }
+  50% {
+    opacity: 0.85;
+    filter: blur(26px);
+  }
+}
+
+@keyframes upload-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
 /*
  * Fabric.js wraps the <canvas> it's given in its own ".canvas-container" div,
  * sized in inline styles to match the canvas's pixel dimensions. Left alone,

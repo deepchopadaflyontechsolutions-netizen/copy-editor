@@ -35,12 +35,3 @@ export interface ValidationError {
 export type ValidationResult =
   | { ok: true; data: ValidatedImage }
   | { ok: false; error: ValidationError };
-
-export interface ImageUploaderProps {
-  /** Called with extracted metadata once a file passes all 4 validation checks. */
-  onImageValidated: (image: ValidatedImage) => void;
-  /** Called whenever any validation check fails. */
-  onValidationError?: (error: ValidationError) => void;
-  className?: string;
-  disabled?: boolean;
-}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Box, IconButton, Stack, Typography } from "@mui/material";
 import { SlidersHorizontal, User } from "lucide-react";
-import CanvasStage from "./CanvasStage";
+import CanvasWorkspace from "./CanvasWorkspace";
 import MobileFloatingPanel from "./MobileFloatingPanel";
 import MobileBottomTabs from "./MobileBottomTabs";
 import MobileEditSheet from "./MobileEditSheet";
@@ -42,7 +42,7 @@ export default function MobileEditor() {
       </Stack>
 
       <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0, m: 1.5 }}>
-        <CanvasStage />
+        <CanvasWorkspace />
       </Box>
 
       {mobileTab === "edit" && <MobileFloatingPanel />}
