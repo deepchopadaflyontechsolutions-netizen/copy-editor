@@ -1,35 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Box, useMediaQuery, useTheme } from "@mui/material";
+import { Box } from "@mui/material";
 import { CreativeFlowProvider } from "@/context/CreativeFlowContext";
 import { CanvasEngineProvider } from "@/context/CanvasEngineContext";
 import { loadAsset } from "@/lib/landing/assetStore";
 import type { EditIntentId } from "@/types/editIntent";
 import EditorTopBar from "./EditorTopBar";
-import EditorToolRow from "./EditorToolRow";
 import CanvasWorkspace from "./CanvasWorkspace";
-import BeforeAfterExportBar from "./BeforeAfterExportBar";
 import RightPanel from "./RightPanel";
-import MobileEditor from "./MobileEditor";
-
-function DesktopEditor() {
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minHeight: 0, bgcolor: "#020617" }}>
-      <EditorTopBar />
-      <EditorToolRow />
-      <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
-        <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
-          <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0, p: 3 }}>
-            <CanvasWorkspace />
-          </Box>
-          <BeforeAfterExportBar />
-        </Box>
-        <RightPanel />
-      </Box>
-    </Box>
-  );
-}
 
 interface CreativeFlowAppProps {
   /** The edit-mode intent chosen on the landing page, read from ?tool= on /editor. */
@@ -39,9 +18,6 @@ interface CreativeFlowAppProps {
 }
 
 export default function CreativeFlowApp({ initialTool = null, initialAssetId = null }: CreativeFlowAppProps) {
-  const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
-
   const [initialImageFile, setInitialImageFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -78,15 +54,30 @@ export default function CreativeFlowApp({ initialTool = null, initialAssetId = n
   return (
     <CreativeFlowProvider initialTool={initialTool}>
       <CanvasEngineProvider initialImageFile={initialImageFile} initialTool={initialTool}>
+        {/* One tree for every screen size — RightPanel decides for itself (via CSS breakpoints,
+            not JS) whether to render as the permanent desktop dock or the mobile floating-button
+            + bottom-sheet, so there's no client-only "which layout am I" branch left to flash or
+            mismatch during hydration. */}
         <Box
           sx={{
             display: "flex",
             flexDirection: "column",
+            flexGrow: 1,
+            minHeight: 0,
             height: "100vh",
             overflow: "hidden",
+            bgcolor: "#0a0a0a",
           }}
         >
-          {isDesktop ? <DesktopEditor /> : <MobileEditor />}
+          <EditorTopBar />
+          <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
+            <RightPanel />
+            <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0, minHeight: 0 }}>
+              <Box sx={{ display: "flex", flexGrow: 1, minHeight: 0 }}>
+                <CanvasWorkspace />
+              </Box>
+            </Box>
+          </Box>
         </Box>
       </CanvasEngineProvider>
     </CreativeFlowProvider>

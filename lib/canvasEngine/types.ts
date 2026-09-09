@@ -17,6 +17,9 @@ export interface TransformState {
   scaleY: number;
   /** Degrees, clockwise, pivoting around the box's center. */
   rotation: number;
+  /** Mirrors the rendered content around the box's own center — orthogonal to width/height/scale, so it never affects hit-testing or resize handles. */
+  flipX: boolean;
+  flipY: boolean;
 }
 
 export interface EngineImageContent {
@@ -38,6 +41,8 @@ export interface EngineLayer {
   /** 0-100, matches the existing UI scale. */
   opacity: number;
   blendMode: BlendModeKey;
+  /** Rendered-box corner rounding, in object-space px. Clamped to half the shorter side at draw time. */
+  cornerRadius: number;
   transform: TransformState;
   image: EngineImageContent;
 }
@@ -80,4 +85,4 @@ export interface SnapGuide {
   end: number;
 }
 
-export type InteractionMode = "idle" | "dragging" | "resizing" | "rotating" | "panning" | "cropping";
+export type InteractionMode = "idle" | "dragging" | "resizing" | "rotating" | "cropping";

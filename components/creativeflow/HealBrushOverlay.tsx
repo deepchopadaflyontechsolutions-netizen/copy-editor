@@ -14,10 +14,10 @@ export default function HealBrushOverlay() {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-4 z-2 flex justify-center">
       <div
-        className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-slate-700/60 bg-slate-900/90 px-4 py-2.5 shadow-lg shadow-black/30 backdrop-blur-md"
+        className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-neutral-700/60 bg-neutral-900/90 px-4 py-2.5 shadow-lg shadow-black/30 backdrop-blur-md"
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <p className="whitespace-nowrap text-xs font-medium text-slate-300">
+        <p className="whitespace-nowrap text-xs font-medium text-neutral-300">
           {hasHealStrokes ? "Ready to remove painted area" : "Paint over the area to remove"}
         </p>
 
@@ -25,7 +25,7 @@ export default function HealBrushOverlay() {
           type="button"
           onClick={cancelHealMode}
           disabled={isAutoCleaning}
-          className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-neutral-300 transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <X size={13} />
           Cancel
@@ -34,10 +34,10 @@ export default function HealBrushOverlay() {
           type="button"
           onClick={() => void applyHealMode()}
           disabled={isAutoCleaning || !hasHealStrokes}
-          className="flex items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isAutoCleaning ? (
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-black/30 border-t-black" />
           ) : (
             <Check size={13} />
           )}

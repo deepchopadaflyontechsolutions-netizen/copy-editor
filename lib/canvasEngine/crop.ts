@@ -29,7 +29,7 @@ export interface CropSessionState {
 
 export type CropDragState =
   | { kind: "handle"; handle: CropHandleKey; startRect: Rect }
-  | { kind: "body"; startImageBox: Rect; startPointerObject: Point }
+  | { kind: "body"; startRect: Rect; startPointerObject: Point }
   | null;
 
 const MIN_CROP_SIZE = 24;
@@ -183,15 +183,15 @@ export function stepCropResize(
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-/** Pans the underlying image under a crop window that stays fixed on screen, clamped so the window can never expose past the image's edge. */
-export function stepCropPan(startImageBox: Rect, cropRect: Rect, pointerDelta: Point): Rect {
-  const minX = cropRect.x + cropRect.width - startImageBox.width;
-  const maxX = cropRect.x;
-  const minY = cropRect.y + cropRect.height - startImageBox.height;
-  const maxY = cropRect.y;
-  const x = clamp(startImageBox.x + pointerDelta.x, minX, maxX);
-  const y = clamp(startImageBox.y + pointerDelta.y, minY, maxY);
-  return { ...startImageBox, x, y };
+/** Drags the crop window itself over a fixed, stationary image, clamped so the window can never move past the image's edge. */
+export function stepCropRectPan(startRect: Rect, imageBox: Rect, pointerDelta: Point): Rect {
+  const minX = imageBox.x;
+  const maxX = imageBox.x + imageBox.width - startRect.width;
+  const minY = imageBox.y;
+  const maxY = imageBox.y + imageBox.height - startRect.height;
+  const x = clamp(startRect.x + pointerDelta.x, minX, maxX);
+  const y = clamp(startRect.y + pointerDelta.y, minY, maxY);
+  return { ...startRect, x, y };
 }
 
 /** Largest `ratio`-shaped window centered within `bounds` (the full image). */

@@ -113,7 +113,7 @@ export default function HowItWorks() {
     <section id="how-it-works" className="px-6 pb-28">
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             From upload to download in five steps
           </h2>
           <p className="mt-3 text-slate-400">No tutorials needed — the workflow is the whole app.</p>
@@ -183,7 +183,7 @@ export default function HowItWorks() {
                       </span>
                     </div>
                     <p className="mt-4 text-sm leading-relaxed text-slate-400">{step.description}</p>
-                    <h3 className="mt-3 text-lg font-bold text-white">{step.title}</h3>
+                    <h3 className="mt-3 text-lg font-semibold text-white">{step.title}</h3>
                   </motion.div>
                 </AnimatePresence>
               </div>

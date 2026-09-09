@@ -1,17 +1,33 @@
 "use client";
 
 import { alpha, useTheme } from "@mui/material/styles";
-import { Box, Card, Chip, IconButton, Stack, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  Card,
+  Chip,
+  IconButton,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material";
 import { FileImage, HardDrive, Maximize2, X } from "lucide-react";
 import { formatBytes, formatMimeLabel } from "@/lib/formatters";
 import type { ImagePreviewCardProps } from "@/types/editor";
 
-export default function ImagePreviewCard({ image, onClear, className }: ImagePreviewCardProps) {
+export default function ImagePreviewCard({
+  image,
+  onClear,
+  className,
+}: ImagePreviewCardProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
-  const checkerColor = isDark ? "rgba(248, 250, 252, 0.08)" : "rgba(15, 23, 42, 0.06)";
-  const glassBackground = isDark ? alpha("#1E293B", 0.7) : alpha("#FFFFFF", 0.7);
+  const checkerColor = isDark
+    ? "rgba(248, 250, 252, 0.08)"
+    : "rgba(15, 23, 42, 0.06)";
+  const glassBackground = isDark
+    ? alpha("#1E293B", 0.7)
+    : alpha("#FFFFFF", 0.7);
 
   return (
     <Card
@@ -80,7 +96,7 @@ export default function ImagePreviewCard({ image, onClear, className }: ImagePre
       <Box sx={{ p: 2.5, borderTop: "1px solid", borderColor: "divider" }}>
         <Typography
           variant="subtitle2"
-          sx={{ fontWeight: 700, mb: 1.5, wordBreak: "break-all" }}
+          sx={{ fontWeight: 600, mb: 1.5, wordBreak: "break-all" }}
           title={image.fileName}
         >
           {image.fileName}

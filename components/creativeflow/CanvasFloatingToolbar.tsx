@@ -11,7 +11,7 @@ export default function CanvasFloatingToolbar() {
   return (
     <div className="pointer-events-none absolute left-1/2 top-3 z-2 -translate-x-1/2">
       <div
-        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-slate-700/60 bg-slate-900/85 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
+        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-neutral-700/60 bg-neutral-900/85 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
         // Renders inside the same container CanvasWorkspace's interaction
         // hook listens on for pointerdown — without this, a button click's
         // native pointerdown would bubble up, get hit-tested against
@@ -26,7 +26,7 @@ export default function CanvasFloatingToolbar() {
           <Redo2 size={15} />
         </ToolbarIconButton>
 
-        <span className="mx-0.5 h-4.5 w-px bg-slate-700/70" />
+        <span className="mx-0.5 h-4.5 w-px bg-neutral-700/70" />
 
         <ToolbarIconButton label="Zoom out" onClick={zoomOut}>
           <ZoomOut size={15} />
@@ -35,7 +35,7 @@ export default function CanvasFloatingToolbar() {
           type="button"
           title="Reset zoom to 100%"
           onClick={resetView}
-          className="min-w-11 rounded-full px-1 text-center font-mono text-xs font-semibold tabular-nums text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          className="min-w-11 rounded-full px-1 text-center text-xs font-semibold tabular-nums text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white"
         >
           {Math.round(zoom * 100)}%
         </button>
@@ -43,7 +43,7 @@ export default function CanvasFloatingToolbar() {
           <ZoomIn size={15} />
         </ToolbarIconButton>
 
-        <span className="mx-0.5 h-4.5 w-px bg-slate-700/70" />
+        <span className="mx-0.5 h-4.5 w-px bg-neutral-700/70" />
 
         <ToolbarIconButton label="Center canvas" onClick={centerCanvas}>
           <Maximize size={15} />
@@ -78,7 +78,7 @@ function ToolbarIconButton({
       disabled={disabled}
       onClick={onClick}
       className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
-        active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+        active ? "bg-blue-600 text-white" : "text-neutral-300 hover:bg-neutral-800 hover:text-white"
       }`}
     >
       {children}

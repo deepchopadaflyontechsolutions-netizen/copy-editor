@@ -62,7 +62,7 @@ export default function WatermarkRemovalSection({ activeTab }: { activeTab: Medi
               {badge}
             </span>
 
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
               {heading}
             </h2>
 

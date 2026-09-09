@@ -97,7 +97,7 @@ export default function ShowcaseSection({ activeTab }: { activeTab: EditorTab })
 
       <div className="relative mx-auto max-w-6xl">
         <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             A canvas built for{" "}
             <span className="bg-gradient-to-r from-cyan-300 to-teal-200 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(45,212,191,0.35)]">
               precision
@@ -208,7 +208,7 @@ export default function ShowcaseSection({ activeTab }: { activeTab: EditorTab })
 
                       {/* Timeline scrubber */}
                       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8">
-                        <div className="mb-1.5 flex items-center justify-between text-[10px] font-mono text-slate-300">
+                        <div className="mb-1.5 flex items-center justify-between text-[10px] text-slate-300">
                           <span>00:14</span>
                           <span>01:30</span>
                         </div>

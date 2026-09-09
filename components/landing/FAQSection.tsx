@@ -61,7 +61,7 @@ export default function FAQSection() {
     <section id="faq" className="px-6 pb-28">
       <div className="mx-auto max-w-3xl">
         <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Frequently asked questions
           </h2>
           <p className="mt-3 text-slate-400">Everything you need to know before you start editing.</p>

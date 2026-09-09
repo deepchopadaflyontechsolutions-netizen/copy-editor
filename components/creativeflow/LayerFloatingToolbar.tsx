@@ -25,7 +25,7 @@ export default function LayerFloatingToolbar({ layer, viewport, onToggleLock, on
       style={{ left: centerX, top: minY - 50 }}
     >
       <div
-        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-slate-700/60 bg-slate-900/90 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
+        className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-neutral-700/60 bg-neutral-900/90 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
         // This toolbar renders inside the same container the canvas
         // interaction hook listens on for pointerdown — without stopping
         // propagation here, clicking a button (which fires a native
@@ -43,7 +43,7 @@ export default function LayerFloatingToolbar({ layer, viewport, onToggleLock, on
         <ToolbarButton label="Delete" onClick={onDelete}>
           <Trash2 size={14} />
         </ToolbarButton>
-        <span className="mx-0.5 h-4.5 w-px bg-slate-700/70" />
+        <span className="mx-0.5 h-4.5 w-px bg-neutral-700/70" />
         <ToolbarButton label="Crop" onClick={onCrop}>
           <CropIcon size={14} />
         </ToolbarButton>
@@ -74,7 +74,7 @@ function ToolbarButton({
       aria-pressed={active}
       onClick={onClick}
       className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
-        active ? "bg-indigo-600 text-white" : "text-slate-300 hover:bg-slate-800 hover:text-white"
+        active ? "bg-white text-black" : "text-neutral-300 hover:bg-neutral-800 hover:text-white"
       }`}
     >
       {children}

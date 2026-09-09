@@ -1,13 +1,95 @@
 @import "tailwindcss";
 
-@theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --default-font-family: "-apple-system-body", "ui-sans-serif", "-apple-system", "system-ui", "Segoe UI", "Helvetica", "Apple Color Emoji", "Arial", "sans-serif", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
 @theme {
+  --font-sans: var(--default-font-family);
+  --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco,
+    Consolas, "Liberation Mono", monospace;
   --animate-neon-glow-pulse: neon-glow-pulse 2.5s ease-in-out infinite;
   --animate-upload-progress: upload-progress 1.1s ease-in-out infinite;
+}
+
+/*
+ * ChatGPT/OpenAI-inspired hierarchy: one system font everywhere (no separate
+ * "heading" face), a restrained weight scale (400 body / 500 labels & CTAs /
+ * 600 headings), and near-neutral tracking. These are base-layer defaults
+ * only, so any more specific Tailwind utility already on an element (e.g.
+ * PanelSection's `tracking-wider` labels, or a card title's own
+ * `font-semibold`) still wins — this only sets the hierarchy for elements
+ * that don't override it.
+ */
+@layer base {
+  html,
+  body {
+    font-family: var(--default-font-family);
+  }
+
+  body {
+    font-family: var(--default-font-family);
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 400;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  h3,
+  h4 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  /* Every clickable control shows a pointer cursor by default, everywhere in
+     the app — buttons, role="button" elements, links, labels for form
+     controls, and interactive form inputs — without having to remember to
+     add `cursor-pointer` on each one individually. Anything actually
+     disabled falls back to the browser's not-allowed/default cursor via its
+     own `disabled:` utility (declared in the utilities layer, so it loads
+     after this and wins), and this only overrides the pointer for a
+     `disabled` button/input itself, not for `aria-disabled` custom controls,
+     which should keep setting their own cursor. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  label[for],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="color"]:not(:disabled),
+  input[type="file"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }
 
 @keyframes neon-glow-pulse {
@@ -49,37 +131,110 @@
 }
 
 /*
- * Thin, theme-matching scrollbar for dark-UI scroll areas (thumbnail carousel,
- * edit-tools pane, etc). The accent color defaults to blue and switches to
- * purple via `data-accent="video"` on the element itself, so one class covers
- * both the image- and video-mode editor without needing separate variants.
+ * Fully hidden scrollbar for a horizontally-scrollable strip that should
+ * read as a floating pill, not a scroll list — the mobile ContextToolbar,
+ * whose full button row is wider than a phone screen and scrolls sideways
+ * instead of wrapping or clipping.
  */
-.custom-scrollbar {
-  --scrollbar-thumb-hover: #3b82f6;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb-hover) rgba(15, 23, 42, 0.5);
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.custom-scrollbar[data-accent="video"] {
-  --scrollbar-thumb-hover: #a855f7;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Thin, theme-matching scrollbar for dark-UI scroll areas (thumbnail carousel,
+ * edit-tools pane, etc). Neutral light-grey-on-dark, not an accent color — the
+ * dark/near-white UI (chat-app style) this app follows keeps scrollbars quiet
+ * rather than colored, same on every panel regardless of `data-accent`.
+ */
+.custom-scrollbar {
+  --scrollbar-thumb-hover: rgba(248, 250, 252, 0.85);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-hover) rgba(15, 23, 42, 0.5);
+  /* Reserve the thumb's gutter even when content doesn't overflow, so
+     switching between a short panel (no scrollbar) and a tall one (has one)
+     doesn't shift the panel's content width by the scrollbar's size. */
+  scrollbar-gutter: stable;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(2, 6, 23, 0.5);
+  background: transparent;
   border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(51, 65, 85, 0.6);
+  width: 4px;
+  background: color-mix(in srgb, var(--scrollbar-thumb-hover) 55%, transparent);
+  border: none;
+  background-clip: padding-box;
   border-radius: 9999px;
   transition: background-color 0.2s ease;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/*
+ * Draggable zoom slider (editor top bar). The filled portion left of the
+ * thumb is painted by the element's own `background` (set inline per-value
+ * as a two-stop gradient), so the track pseudo-elements below stay fully
+ * transparent and just let that show through — the standard cross-browser
+ * trick for a "progress" look on a native <input type="range">.
+ */
+.zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  width: 100%;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+}
+
+.zoom-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -4.5px;
+  border-radius: 9999px;
+  background: #f8fafc;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s ease;
+}
+
+.zoom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+.zoom-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+.zoom-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: none;
+  border-radius: 9999px;
+  background: #f8fafc;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }

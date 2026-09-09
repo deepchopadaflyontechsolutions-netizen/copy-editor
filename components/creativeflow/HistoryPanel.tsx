@@ -9,7 +9,7 @@ export default function HistoryPanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
         History
       </Typography>
       <Stack component="ul" sx={{ listStyle: "none", m: 0, p: 0, gap: 0.5 }}>

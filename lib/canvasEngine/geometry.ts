@@ -11,13 +11,24 @@ export function rotateVector(v: Point, degrees: number): Point {
   return { x: v.x * cos - v.y * sin, y: v.x * sin + v.y * cos };
 }
 
-/** Object-space -> screen-space. Matches Fabric's viewportTransform convention this app already relied on. */
+/**
+ * Object-space -> screen-space, where "screen" means "pixels relative to the
+ * zoomable board container's own top-left corner." The board container's CSS
+ * box is itself sized to `documentSize * zoom` and translated by
+ * `(panX, panY)` (see CanvasWorkspace) — that resize+translate is what makes
+ * the whole board (dotted background, page, layers, bounding boxes) grow and
+ * shrink together, so `panX`/`panY` are a pure DOM positioning concern
+ * already baked into the container's on-screen rect and must NOT be added
+ * again here. Only the `zoom` factor still needs to be applied in JS, for
+ * children (canvas draw calls, SVG overlays) that live *inside* that
+ * board container and must match the size it was given.
+ */
 export function toScreen(point: Point, viewport: Viewport): Point {
-  return { x: point.x * viewport.zoom + viewport.panX, y: point.y * viewport.zoom + viewport.panY };
+  return { x: point.x * viewport.zoom, y: point.y * viewport.zoom };
 }
 
 export function toObject(point: Point, viewport: Viewport): Point {
-  return { x: (point.x - viewport.panX) / viewport.zoom, y: (point.y - viewport.panY) / viewport.zoom };
+  return { x: point.x / viewport.zoom, y: point.y / viewport.zoom };
 }
 
 /** Rendered (post-scale) size of a layer, before rotation. */
@@ -127,11 +138,10 @@ const MIN_LAYER_SIZE = 20;
 
 /**
  * Resizes a layer by dragging `handle` to `pointerObject` (object space).
- * Corner handles always preserve aspect ratio ("proportional scaling");
- * edge handles stretch a single axis ("directional stretching") — matching
- * the distinction the Canva-style spec draws between the two handle kinds.
- * Fully rotation-aware: the corner/edge opposite the dragged handle stays
- * pinned in place regardless of the box's current rotation.
+ * Every handle — corner or edge — preserves the layer's aspect ratio, so
+ * dragging never stretches or squashes the image; only its overall size
+ * changes. Fully rotation-aware: the corner/edge opposite the dragged
+ * handle stays pinned in place regardless of the box's current rotation.
  */
 export function resizeFromHandle(
   transform: TransformState,
@@ -148,13 +158,13 @@ export function resizeFromHandle(
   const pointerLocal = rotateVector({ x: pointerObject.x - anchorAbs.x, y: pointerObject.y - anchorAbs.y }, -transform.rotation);
 
   const isCorner = CORNER_HANDLES.has(handle);
+  const ratio = oldW / oldH;
   let newW = oldW;
   let newH = oldH;
 
   if (isCorner) {
     const rawW = Math.max(MIN_LAYER_SIZE, Math.abs(pointerLocal.x));
     const rawH = Math.max(MIN_LAYER_SIZE, Math.abs(pointerLocal.y));
-    const ratio = oldW / oldH;
     if (rawW / ratio <= rawH) {
       newW = rawW;
       newH = rawW / ratio;
@@ -164,8 +174,10 @@ export function resizeFromHandle(
     }
   } else if (handle === "ml" || handle === "mr") {
     newW = Math.max(MIN_LAYER_SIZE, Math.abs(pointerLocal.x));
+    newH = newW / ratio;
   } else {
     newH = Math.max(MIN_LAYER_SIZE, Math.abs(pointerLocal.y));
+    newW = newH * ratio;
   }
 
   const newAnchorLocal = { x: (anchorUnit.x * newW) / 2, y: (anchorUnit.y * newH) / 2 };

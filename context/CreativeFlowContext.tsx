@@ -2,20 +2,16 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import type {
-  MobileTabKey,
-  NavKey,
-  RightPanelTab,
-  ToolKey,
-  TopToolKey,
-} from "@/types/creativeflow";
+import type { NavKey, ToolKey, TopToolKey } from "@/types/creativeflow";
 import type { EditIntentId } from "@/types/editIntent";
+
+/** Which drawer tile is open in `RightPanel` — shared so the floating `ContextToolbar` can open a specific section (e.g. its Crop icon jumping to the sidebar's Crop panel). */
+export type RightPanelSectionId = "images" | "adjust" | "resize" | "watermark";
 
 interface CreativeFlowContextValue {
   activeNav: NavKey;
@@ -40,17 +36,8 @@ interface CreativeFlowContextValue {
   exportQuality: string;
   setExportQuality: (value: string) => void;
 
-  rightPanelTab: RightPanelTab;
-  setRightPanelTab: (tab: RightPanelTab) => void;
-
-  mobileTab: MobileTabKey;
-  setMobileTab: (tab: MobileTabKey) => void;
-  mobileSize: number;
-  setMobileSize: (value: number) => void;
-  brushSizeEnabled: boolean;
-  toggleBrushSizeEnabled: () => void;
-  aiSelectionMode: string;
-  setAiSelectionMode: (value: string) => void;
+  activeRightPanelSection: RightPanelSectionId | null;
+  setActiveRightPanelSection: (section: RightPanelSectionId | null) => void;
 }
 
 const CreativeFlowContext = createContext<CreativeFlowContextValue | undefined>(
@@ -97,16 +84,7 @@ export function CreativeFlowProvider({ children, initialTool = null }: CreativeF
   const [fileFormat, setFileFormat] = useState("PNG");
   const [exportQuality, setExportQuality] = useState("High");
 
-  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("layers");
-
-  const [mobileTab, setMobileTab] = useState<MobileTabKey>("edit");
-  const [mobileSize, setMobileSize] = useState(50);
-  const [brushSizeEnabled, setBrushSizeEnabled] = useState(true);
-  const [aiSelectionMode, setAiSelectionMode] = useState("Auto");
-
-  const toggleBrushSizeEnabled = useCallback(() => {
-    setBrushSizeEnabled((prev) => !prev);
-  }, []);
+  const [activeRightPanelSection, setActiveRightPanelSection] = useState<RightPanelSectionId | null>("images");
 
   const value = useMemo<CreativeFlowContextValue>(
     () => ({
@@ -128,16 +106,8 @@ export function CreativeFlowProvider({ children, initialTool = null }: CreativeF
       setFileFormat,
       exportQuality,
       setExportQuality,
-      rightPanelTab,
-      setRightPanelTab,
-      mobileTab,
-      setMobileTab,
-      mobileSize,
-      setMobileSize,
-      brushSizeEnabled,
-      toggleBrushSizeEnabled,
-      aiSelectionMode,
-      setAiSelectionMode,
+      activeRightPanelSection,
+      setActiveRightPanelSection,
     }),
     [
       activeNav,
@@ -149,12 +119,7 @@ export function CreativeFlowProvider({ children, initialTool = null }: CreativeF
       edgeRefinement,
       fileFormat,
       exportQuality,
-      rightPanelTab,
-      mobileTab,
-      mobileSize,
-      brushSizeEnabled,
-      toggleBrushSizeEnabled,
-      aiSelectionMode,
+      activeRightPanelSection,
     ],
   );
 

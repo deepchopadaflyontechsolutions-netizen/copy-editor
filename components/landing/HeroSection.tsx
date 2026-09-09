@@ -18,9 +18,9 @@ export default function HeroSection({
       />
 
       <div className="mx-auto max-w-4xl text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl md:whitespace-nowrap">
+        <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl md:whitespace-nowrap">
           Free Online{" "}
-          <span className="bg-gradient-to-r from-[#0066FF] to-[#06B6D4] bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-[#0066FF] to-[#06B6D4] bg-clip-text text-transparent [filter:drop-shadow(0_0_25px_rgba(59,130,246,0.5))]">
             Image &amp; Video Editor
           </span>
         </h1>

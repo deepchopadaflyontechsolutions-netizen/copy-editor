@@ -1,5 +1,5 @@
 import { getAABB, hitTestLayer, resizeFromHandle, rotateFromPointer } from "./geometry";
-import { computeSnapGuides, isOutOfBounds } from "./snapping";
+import { computeSnapGuides, isOutOfBounds, GUIDE_SNAP_THRESHOLD } from "./snapping";
 import type { EngineLayer, HandleId, Point, Rect, SnapGuide, TransformState } from "./types";
 
 /** Topmost (last in z-order) unlocked layer whose rotated footprint contains `pointerObject`, or null. */
@@ -18,22 +18,34 @@ export interface DragStepResult {
   outOfBounds: boolean;
 }
 
-/** One step of a move-drag: translates `startTransform` by the pointer delta, then snaps against the page and sibling layers (matching the Fabric-based engine's object:moving behavior — move snaps, resize does not). */
+/**
+ * One step of a move-drag: translates `startTransform` by the pointer delta, then snaps against
+ * the page and sibling layers (matching the Fabric-based engine's object:moving behavior — move
+ * snaps, resize does not). Guides are computed for the base layer too — moving the main photo
+ * around the page still benefits from centering/edge alignment lines — but it's never flagged
+ * out-of-bounds, since it's expected to be repositioned freely within (or past) the page.
+ *
+ * `zoom` converts the snap threshold from object-space to a constant on-screen distance
+ * (`GUIDE_SNAP_THRESHOLD` screen px). Without this, the threshold stayed fixed in object-space
+ * px, so at any zoom other than 100% the on-screen catch radius shrank or grew with it — at higher
+ * zoom the snap zone became a couple of screen pixels, making guides feel like they barely ever
+ * appeared.
+ */
 export function stepDrag(
   startTransform: TransformState,
   pointerDelta: Point,
   siblingBoxes: Rect[],
   page: Rect,
   isBaseLayer: boolean,
+  zoom: number,
 ): DragStepResult {
   const moved: TransformState = { ...startTransform, x: startTransform.x + pointerDelta.x, y: startTransform.y + pointerDelta.y };
-  if (isBaseLayer) {
-    return { transform: moved, guides: [], outOfBounds: false };
-  }
   const box = getAABB(moved);
-  const { dx, dy, guides } = computeSnapGuides(box, siblingBoxes, page);
+  const threshold = GUIDE_SNAP_THRESHOLD / zoom;
+  const { dx, dy, guides } = computeSnapGuides(box, siblingBoxes, page, threshold);
   const snapped: TransformState = { ...moved, x: moved.x + dx, y: moved.y + dy };
-  return { transform: snapped, guides, outOfBounds: isOutOfBounds(page, getAABB(snapped)) };
+  const outOfBounds = isBaseLayer ? false : isOutOfBounds(page, getAABB(snapped));
+  return { transform: snapped, guides, outOfBounds };
 }
 
 export interface ResizeStepResult {

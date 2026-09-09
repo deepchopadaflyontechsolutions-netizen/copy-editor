@@ -1,10 +1,9 @@
 "use client";
 
-import { Check, X } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 import { toScreen } from "@/lib/canvasEngine/geometry";
 
-const ACCENT = "#6366F1";
+const ACCENT = "#F8FAFC";
 const HANDLE_ARM = 18;
 const HANDLE_THICKNESS = 3;
 const EDGE_HANDLE_LENGTH = 22;
@@ -19,13 +18,14 @@ const CORNER_UNITS: Record<"tl" | "tr" | "bl" | "br", { ux: -1 | 1; uy: -1 | 1 }
 };
 
 /**
- * Purely visual in-canvas crop chrome — dim mask, thirds guides, white L-corner + side handles,
- * and a small above-box Cancel/Apply pill. All actual hit-testing and dragging happens in
- * `useCanvasWorkspaceController` (mirroring how `SelectionOverlay` never owns pointer logic
- * either — the container's single pointer handler does).
+ * Purely visual in-canvas crop chrome — dim mask, thirds guides, white L-corner + side handles.
+ * All actual hit-testing and dragging happens in `useCanvasWorkspaceController` (mirroring how
+ * `SelectionOverlay` never owns pointer logic either — the container's single pointer handler
+ * does). There's no in-canvas confirm pill — Enter applies, Escape cancels, and clicking
+ * anywhere outside the canvas auto-applies (see the global crop effects in CanvasEngineContext).
  */
 export default function CropCanvasFrame() {
-  const { cropRect, documentSize, viewport, showGrid, applyCrop, cancelCropMode } = useCanvasEngine();
+  const { cropRect, documentSize, viewport, showGrid } = useCanvasEngine();
 
   if (!cropRect) return null;
 
@@ -36,11 +36,18 @@ export default function CropCanvasFrame() {
   const top = topLeft.y;
   const right = left + width;
   const bottom = top + height;
-  const canvasWidth = documentSize.width;
-  const canvasHeight = documentSize.height;
+  // The mask covers this SVG's own box, which matches the board container's
+  // actual size (documentSize * zoom), not the unscaled document size.
+  const canvasWidth = documentSize.width * viewport.zoom;
+  const canvasHeight = documentSize.height * viewport.zoom;
 
+  // Clipped to the canvas box (unlike SelectionOverlay/ContextToolbar, which
+  // intentionally float outside it) — at zoom > 100% the crop rect's
+  // screen-space coordinates run well past the fixed-size container on every
+  // side, and without clipping the mask/grid/handles bled out over the
+  // toolbar and sidebar instead of stopping at the photo's own edge.
   return (
-    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" style={{ zIndex: 2 }}>
+    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden" style={{ zIndex: 2 }}>
       <rect x={0} y={0} width={canvasWidth} height={Math.max(0, top)} fill={MASK_FILL} />
       <rect x={0} y={bottom} width={canvasWidth} height={Math.max(0, canvasHeight - bottom)} fill={MASK_FILL} />
       <rect x={0} y={top} width={Math.max(0, left)} height={height} fill={MASK_FILL} />
@@ -89,32 +96,6 @@ export default function CropCanvasFrame() {
           </g>
         );
       })}
-
-      <foreignObject x={left + width / 2 - 44} y={Math.max(4, top - 44)} width={88} height={36} style={{ overflow: "visible" }}>
-        <div
-          className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-slate-700/60 bg-slate-900/90 p-1 shadow-lg shadow-black/30 backdrop-blur-md"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            aria-label="Cancel crop"
-            title="Cancel (Esc)"
-            onClick={cancelCropMode}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-          >
-            <X size={14} />
-          </button>
-          <button
-            type="button"
-            aria-label="Apply crop"
-            title="Apply (Enter)"
-            onClick={applyCrop}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white transition-colors hover:bg-indigo-500"
-          >
-            <Check size={14} />
-          </button>
-        </div>
-      </foreignObject>
     </svg>
   );
 }

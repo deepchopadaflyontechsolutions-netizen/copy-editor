@@ -1,6 +1,10 @@
 import { createTheme, type Theme, type ThemeOptions } from "@mui/material/styles";
 import type { PaletteMode } from "@mui/material";
 
+// Same system stack as globals.css's `--default-font-family` — keeps
+// Tailwind and MUI text rendering in the same typeface everywhere.
+const fontFamily = "var(--default-font-family)";
+
 const getDesignTokens = (mode: PaletteMode): ThemeOptions => ({
   palette: {
     mode,
@@ -48,10 +52,58 @@ const getDesignTokens = (mode: PaletteMode): ThemeOptions => ({
     borderRadius: 12,
   },
   typography: {
-    fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
-    button: {
-      textTransform: "none",
+    fontFamily,
+    h1: {
+      fontSize: "24px",
       fontWeight: 600,
+      lineHeight: 1.25,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    h2: {
+      fontSize: "20px",
+      fontWeight: 600,
+      lineHeight: 1.3,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    h3: {
+      fontSize: "16px",
+      fontWeight: 600,
+      lineHeight: 1.4,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    h4: {
+      fontSize: "16px",
+      fontWeight: 600,
+      lineHeight: 1.4,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    h5: {
+      fontSize: "20px",
+      fontWeight: 600,
+      lineHeight: 1.3,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    h6: {
+      fontSize: "16px",
+      fontWeight: 600,
+      lineHeight: 1.4,
+      letterSpacing: "var(--tracking-tight)",
+    },
+    body1: {
+      fontSize: "14px",
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    body2: {
+      fontSize: "13px",
+      fontWeight: 400,
+      lineHeight: 1.5,
+    },
+    button: {
+      fontSize: "14px",
+      fontWeight: 500,
+      lineHeight: 1.4,
+      textTransform: "none",
     },
   },
   components: {
@@ -156,8 +208,9 @@ const getDesignTokens = (mode: PaletteMode): ThemeOptions => ({
       styleOverrides: {
         root: {
           minHeight: 36,
+          fontSize: "14px",
           textTransform: "none",
-          fontWeight: 600,
+          fontWeight: 500,
         },
       },
     },

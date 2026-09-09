@@ -14,7 +14,7 @@ export default function PropertiesPanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.5 }}>
-      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
         Properties
       </Typography>
 

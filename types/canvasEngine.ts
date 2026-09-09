@@ -7,31 +7,35 @@ export interface LayerMeta {
   visible: boolean;
 }
 
-/** An image uploaded from the sidebar tray but not yet placed on the canvas. */
-export interface PendingUploadAsset {
-  id: string;
-  file: File;
-  /** Blob URL for the thumbnail preview — revoked once the asset is placed or removed. */
-  previewUrl: string;
-  status: "loading" | "ready";
-}
-
 export type BlendModeKey = "Normal" | "Multiply" | "Screen" | "Overlay";
 
 export interface FilterState {
-  /** UI scale 0-100, mapped to Fabric's -1..1 brightness range. */
+  /** UI scale 0-100 (50 neutral), drives the Light section's "Brightness" slider. */
   exposure: number;
-  /** UI scale 0-100, mapped to Fabric's -1..1 contrast range. */
+  /** UI scale 0-100 (50 neutral), drives the Light section's "Contrast" slider. */
   contrast: number;
-  /** UI scale 0-100, mapped to Fabric's -1..1 saturation range. */
+  /** UI scale 0-100 (50 neutral), drives the Color section's "Saturation" slider. */
   saturation: number;
+  /** Bipolar -100..100 (0 neutral) Color-section adjustments. */
+  vibrance: number;
+  temperature: number;
+  tint: number;
+  hue: number;
+  /** Bipolar -100..100 (0 neutral) Light-section adjustments, alongside exposure/contrast above. */
+  exposureAdjust: number;
+  black: number;
   blendMode: BlendModeKey;
   curvePoints: CurvePoint[];
 }
 
 export type ExportFormat = "png" | "jpeg";
 
-export type DrawingTool = "selection" | "pan" | "brush" | "lasso";
+export type DrawingTool = "selection" | "brush" | "eraser" | "lasso";
+
+/** Custom drag-and-drop MIME type used to identify an internal layer drag —
+ *  e.g. dragging a Media Library thumbnail onto the canvas to reposition it —
+ *  as distinct from a native OS file drop. */
+export const LAYER_DRAG_MIME_TYPE = "application/x-creativeflow-layer-id";
 
 export const BLEND_MODE_TO_COMPOSITE_OPERATION: Record<BlendModeKey, GlobalCompositeOperation> = {
   Normal: "source-over",

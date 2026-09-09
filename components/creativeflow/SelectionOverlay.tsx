@@ -5,7 +5,7 @@ import { GUIDE_COLOR } from "@/lib/canvasEngine/snapping";
 import type { EngineLayer, HandleId, SnapGuide, Viewport } from "@/lib/canvasEngine/types";
 import { toScreen } from "@/lib/canvasEngine/geometry";
 
-const ACCENT = "#7D2AE8";
+const ACCENT = "#F8FAFC";
 const OUT_OF_BOUNDS_COLOR = "#F59E0B";
 
 const CORNER_HANDLES: HandleId[] = ["tl", "tr", "br", "bl"];
@@ -21,7 +21,12 @@ interface SelectionOverlayProps {
 
 export default function SelectionOverlay({ activeLayer, viewport, guides, isOutOfBounds, autoCleanEllipse }: SelectionOverlayProps) {
   return (
-    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden" style={{ zIndex: 2 }}>
+    // overflow-visible (not -hidden): once a resize is a crop rather than a
+    // fit (see `resizeDocument`), a layer's real bounds routinely extend past
+    // the document frame — clipping this SVG at the frame edge would hide
+    // exactly the part the user most needs to see: how much of the image the
+    // page is currently cropping.
+    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" style={{ zIndex: 2 }}>
       {guides.map((guide, index) => {
         const start = guide.axis === "v" ? toScreen({ x: guide.position, y: guide.start }, viewport) : toScreen({ x: guide.start, y: guide.position }, viewport);
         const end = guide.axis === "v" ? toScreen({ x: guide.position, y: guide.end }, viewport) : toScreen({ x: guide.end, y: guide.position }, viewport);
@@ -33,8 +38,9 @@ export default function SelectionOverlay({ activeLayer, viewport, guides, isOutO
             x2={end.x}
             y2={end.y}
             stroke={GUIDE_COLOR}
-            strokeWidth={1}
-            strokeDasharray="4 3"
+            strokeWidth={1.5}
+            strokeDasharray="5 4"
+            style={{ filter: "drop-shadow(0 0 1.5px rgba(0,0,0,0.85))" }}
           />
         );
       })}

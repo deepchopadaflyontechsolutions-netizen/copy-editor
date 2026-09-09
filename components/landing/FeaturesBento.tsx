@@ -42,7 +42,7 @@ export default function FeaturesBento() {
     <section id="features" className="px-6 pb-28">
       <div className="mx-auto max-w-6xl">
         <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Everything you need, nothing you don&apos;t
           </h2>
           <p className="mt-3 text-slate-400">

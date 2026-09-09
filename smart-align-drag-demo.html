@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Guides Drag & Drop</title>
+<style>
+  :root {
+    --bg: #1e1f24;
+    --panel: #26272e;
+    --border: #3a3b43;
+    --guide: #ff4fd8;
+    --accent: #6c8dff;
+    --text: #e8e9ee;
+    --muted: #9a9ba5;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 32px 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  p.hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    max-width: 480px;
+  }
+
+  #stage {
+    position: relative;
+    width: min(900px, 94vw);
+    height: 560px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+
+  .box {
+    position: absolute;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(0,0,0,0.55);
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    transition: box-shadow 0.15s ease, transform 0.05s ease;
+  }
+
+  .box:active {
+    cursor: grabbing;
+  }
+
+  .box.dragging {
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+    z-index: 50;
+  }
+
+  .guide {
+    position: absolute;
+    background: transparent;
+    border: none;
+    pointer-events: none;
+    z-index: 40;
+  }
+
+  .guide.v {
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1.5px dashed var(--guide);
+  }
+
+  .guide.h {
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 1.5px dashed var(--guide);
+  }
+
+  .guide::after {
+    content: "";
+    position: absolute;
+    background: var(--guide);
+    box-shadow: 0 0 6px var(--guide);
+  }
+
+  .guide.v::after {
+    top: 0;
+    bottom: 0;
+    left: -0.5px;
+    width: 1px;
+  }
+
+  .guide.h::after {
+    left: 0;
+    right: 0;
+    top: -0.5px;
+    height: 1px;
+  }
+
+  footer {
+    font-size: 12px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<h1>Drag & Drop Smart Guides</h1>
+<p class="hint">Drag any box around the stage. Dashed magenta lines appear when an edge or center lines up with another box, with a gentle snap within 5px.</p>
+
+<div id="stage">
+  <div class="box" style="left:60px; top:70px; width:140px; height:100px; background:#ffb454;">A</div>
+  <div class="box" style="left:400px; top:220px; width:160px; height:110px; background:#5fd0ff;">B</div>
+  <div class="box" style="left:640px; top:70px; width:120px; height:150px; background:#a6ff5f;">C</div>
+  <div class="box" style="left:120px; top:340px; width:180px; height:90px; background:#ff87c2;">D</div>
+</div>
+
+<footer>Vanilla JS &middot; no external libraries</footer>
+
+<script>
+(function () {
+  const stage = document.getElementById("stage");
+  const boxes = Array.from(stage.querySelectorAll(".box"));
+  const SNAP_THRESHOLD = 5;
+
+  let activeBox = null;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+  let stageRect = null;
+  let activeGuides = [];
+  let rafId = null;
+  let pendingLeft = 0;
+  let pendingTop = 0;
+
+  function clearGuides() {
+    activeGuides.forEach((g) => g.remove());
+    activeGuides = [];
+  }
+
+  function addGuide(type, position) {
+    const guide = document.createElement("div");
+    guide.className = "guide " + type;
+    if (type === "v") {
+      guide.style.left = position + "px";
+    } else {
+      guide.style.top = position + "px";
+    }
+    stage.appendChild(guide);
+    activeGuides.push(guide);
+  }
+
+  function getEdges(rect) {
+    return {
+      left: rect.left,
+      centerX: rect.left + rect.width / 2,
+      right: rect.left + rect.width,
+      top: rect.top,
+      centerY: rect.top + rect.height / 2,
+      bottom: rect.top + rect.height,
+    };
+  }
+
+  function computeSnap(left, top, width, height) {
+    const dragEdges = getEdges({ left, top, width, height });
+
+    const others = boxes
+      .filter((b) => b !== activeBox)
+      .map((b) => getEdges({
+        left: parseFloat(b.style.left),
+        top: parseFloat(b.style.top),
+        width: b.offsetWidth,
+        height: b.offsetHeight,
+      }));
+
+    let snapX = null; // { delta, guidePos }
+    let snapY = null;
+
+    const xCandidates = [
+      { key: "left", value: dragEdges.left },
+      { key: "centerX", value: dragEdges.centerX },
+      { key: "right", value: dragEdges.right },
+    ];
+    const yCandidates = [
+      { key: "top", value: dragEdges.top },
+      { key: "centerY", value: dragEdges.centerY },
+      { key: "bottom", value: dragEdges.bottom },
+    ];
+
+    others.forEach((other) => {
+      ["left", "centerX", "right"].forEach((otherKey) => {
+        const targetVal = other[otherKey];
+        xCandidates.forEach((cand) => {
+          const diff = targetVal - cand.value;
+          if (Math.abs(diff) <= SNAP_THRESHOLD) {
+            if (!snapX || Math.abs(diff) < Math.abs(snapX.delta)) {
+              snapX = { delta: diff, guidePos: targetVal, edgeKey: cand.key };
+            }
+          }
+        });
+      });
+
+      ["top", "centerY", "bottom"].forEach((otherKey) => {
+        const targetVal = other[otherKey];
+        yCandidates.forEach((cand) => {
+          const diff = targetVal - cand.value;
+          if (Math.abs(diff) <= SNAP_THRESHOLD) {
+            if (!snapY || Math.abs(diff) < Math.abs(snapY.delta)) {
+              snapY = { delta: diff, guidePos: targetVal, edgeKey: cand.key };
+            }
+          }
+        });
+      });
+    });
+
+    return { snapX, snapY };
+  }
+
+  function onPointerDown(e) {
+    const box = e.currentTarget;
+    activeBox = box;
+    stageRect = stage.getBoundingClientRect();
+
+    const boxRect = box.getBoundingClientRect();
+    dragOffsetX = e.clientX - boxRect.left;
+    dragOffsetY = e.clientY - boxRect.top;
+
+    box.classList.add("dragging");
+    box.setPointerCapture(e.pointerId);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
+  function onPointerMove(e) {
+    if (!activeBox) return;
+
+    let left = e.clientX - stageRect.left - dragOffsetX;
+    let top = e.clientY - stageRect.top - dragOffsetY;
+
+    const width = activeBox.offsetWidth;
+    const height = activeBox.offsetHeight;
+
+    left = Math.max(0, Math.min(left, stage.clientWidth - width));
+    top = Math.max(0, Math.min(top, stage.clientHeight - height));
+
+    const { snapX, snapY } = computeSnap(left, top, width, height);
+
+    if (snapX) left += snapX.delta;
+    if (snapY) top += snapY.delta;
+
+    pendingLeft = left;
+    pendingTop = top;
+
+    if (rafId === null) {
+      rafId = requestAnimationFrame(() => {
+        activeBox.style.left = pendingLeft + "px";
+        activeBox.style.top = pendingTop + "px";
+
+        clearGuides();
+        if (snapX) addGuide("v", snapX.guidePos);
+        if (snapY) addGuide("h", snapY.guidePos);
+
+        rafId = null;
+      });
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!activeBox) return;
+    activeBox.classList.remove("dragging");
+    activeBox.releasePointerCapture(e.pointerId);
+    activeBox = null;
+    clearGuides();
+
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  }
+
+  boxes.forEach((box) => {
+    box.addEventListener("pointerdown", onPointerDown);
+  });
+})();
+</script>
+
+</body>
+</html>

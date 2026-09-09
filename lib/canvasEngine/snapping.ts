@@ -2,7 +2,7 @@ import type { Rect, SnapGuide } from "./types";
 
 /** How close (object-space px, zoom-independent) an edge/center needs to land to a guide before it snaps — matches the Fabric-based engine's own threshold. */
 export const GUIDE_SNAP_THRESHOLD = 6;
-export const GUIDE_COLOR = "#EC4899";
+export const GUIDE_COLOR = "#F8FAFC";
 
 interface ClosestGuide {
   guide: number;
@@ -44,11 +44,14 @@ export function computeSnapGuides(box: Rect, siblingBoxes: Rect[], page: Rect, t
   const dx = bestV ? bestV.delta : 0;
   const dy = bestH ? bestH.delta : 0;
 
+  // The guide line hugs exactly the layer being aligned — no overshoot past
+  // its edges, so it reads as "this border is what's aligned" rather than a
+  // line that visibly pokes out past the image on either side.
   const snappedBox: Rect = { x: box.x + dx, y: box.y + dy, width: box.width, height: box.height };
-  const spanTop = Math.min(page.y, snappedBox.y) - 40;
-  const spanBottom = Math.max(page.y + page.height, snappedBox.y + snappedBox.height) + 40;
-  const spanLeft = Math.min(page.x, snappedBox.x) - 40;
-  const spanRight = Math.max(page.x + page.width, snappedBox.x + snappedBox.width) + 40;
+  const spanTop = snappedBox.y;
+  const spanBottom = snappedBox.y + snappedBox.height;
+  const spanLeft = snappedBox.x;
+  const spanRight = snappedBox.x + snappedBox.width;
 
   const guides: SnapGuide[] = [];
   if (bestV) guides.push({ axis: "v", position: bestV.guide, start: spanTop, end: spanBottom });

@@ -115,7 +115,7 @@ export default function ResizeControls({
         backgroundColor: isDark ? "#1E293B" : "background.paper",
       }}
     >
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 2 }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
         Resize
       </Typography>
 

@@ -155,7 +155,7 @@ export default function MediaCompareSlider({
         onPointerLeave={stopDragging}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`relative w-full touch-none select-none overflow-hidden bg-[#0F172A] ${aspectClassName}`}
+        className={`relative w-full cursor-ew-resize touch-none select-none overflow-hidden bg-[#0F172A] ${aspectClassName}`}
       >
         {checkerboardAfter && (
           <div

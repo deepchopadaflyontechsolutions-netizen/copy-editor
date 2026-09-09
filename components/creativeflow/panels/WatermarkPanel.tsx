@@ -1,101 +1,78 @@
 "use client";
 
-import { useId, useRef, useState, type ChangeEvent } from "react";
-import { ImagePlus, Type } from "lucide-react";
+import { useId, useState } from "react";
+import { Type, WandSparkles } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 import PanelSection from "./PanelSection";
-
-type WatermarkTab = "text" | "logo";
+import { button, cardRadius, text as textStyles } from "../ui";
 
 export default function WatermarkPanel() {
-  const { hasImage, addTextWatermark, addImageLayer, isImageLoading } = useCanvasEngine();
-  const [tab, setTab] = useState<WatermarkTab>("text");
-  const [text, setText] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { hasImage, addTextWatermark, startAutoClean, autoCleanPreview, isAutoCleaning } = useCanvasEngine();
+  const [watermarkText, setText] = useState("");
   const inputId = useId();
 
   const handleAddText = () => {
-    if (!text.trim()) return;
-    addTextWatermark(text);
+    if (!watermarkText.trim()) return;
+    addTextWatermark(watermarkText);
     setText("");
-  };
-
-  const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (file) void addImageLayer(file);
   };
 
   return (
     <PanelSection title="Watermark">
-      <div className="mb-3 flex gap-1 rounded-lg border border-slate-800 bg-slate-900/60 p-1">
-        {(
-          [
-            { key: "text" as const, label: "Text", Icon: Type },
-            { key: "logo" as const, label: "Logo", Icon: ImagePlus },
-          ]
-        ).map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            aria-pressed={tab === key}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-[11px] font-semibold transition-colors ${
-              tab === key ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <Icon size={12} />
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className="flex flex-col gap-3">
+        <div className={`${cardRadius} border border-neutral-800/70 bg-neutral-900/40 p-3`}>
+          <div className="mb-3 flex items-center gap-2 border-b border-neutral-800/70 pb-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white">
+              <Type size={13} strokeWidth={2.25} />
+            </span>
+            <h4 className={textStyles.eyebrow}>Text watermark</h4>
+          </div>
 
-      {tab === "text" ? (
-        <div className="relative flex flex-col gap-2">
           <label htmlFor={inputId} className="sr-only">
             Watermark text
           </label>
           <input
             id={inputId}
             type="text"
-            value={text}
+            value={watermarkText}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => event.key === "Enter" && handleAddText()}
             placeholder="Your watermark text…"
             disabled={!hasImage}
-            className="w-full rounded-md border border-slate-700 bg-slate-900/70 px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none disabled:opacity-40"
+            className="mb-2.5 w-full rounded-lg border border-neutral-700 bg-neutral-950/60 px-3 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-white/25 focus:outline-none disabled:opacity-40"
           />
           <button
             type="button"
             onClick={handleAddText}
-            disabled={!hasImage || !text.trim()}
-            className="flex items-center justify-center gap-1.5 rounded-md bg-indigo-600 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!hasImage || !watermarkText.trim()}
+            className={`w-full ${button.primary}`}
           >
-            <Type size={12} />
+            <Type size={14} strokeWidth={1.75} />
             Add text layer
           </button>
         </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleLogoChange}
-            aria-label="Upload logo image"
-          />
+
+        <div className={`${cardRadius} border border-neutral-800/70 bg-neutral-900/40 p-3`}>
+          <div className="mb-3 flex items-center gap-2 border-b border-neutral-800/70 pb-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-white">
+              <WandSparkles size={13} strokeWidth={2.25} />
+            </span>
+            <h4 className={textStyles.eyebrow}>Auto remove</h4>
+          </div>
+          <p className={`mb-2.5 ${textStyles.helper}`}>
+            Detect an existing watermark on the image and remove it automatically.
+          </p>
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!hasImage || isImageLoading}
-            className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-700 py-3 text-[11px] font-medium text-slate-400 transition-colors hover:border-indigo-500/50 hover:text-indigo-300 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={startAutoClean}
+            disabled={!hasImage || autoCleanPreview || isAutoCleaning}
+            className="flex w-full cursor-pointer items-start gap-2.5 rounded-lg border border-neutral-700 bg-neutral-800/60 px-3.5 py-2.5 text-left text-sm font-semibold text-neutral-200 transition-colors hover:border-neutral-600 hover:bg-neutral-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <ImagePlus size={14} />
-            {isImageLoading ? "Adding…" : "Upload a logo image"}
+            <WandSparkles size={14} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+            <span>Detect &amp; remove existing watermark</span>
           </button>
         </div>
-      )}
+      </div>
     </PanelSection>
   );
 }

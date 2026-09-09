@@ -14,9 +14,9 @@ import {
   Menu,
   Palette,
   Scissors,
-  Sparkles,
   X,
 } from "lucide-react";
+import Logo from "@/components/Logo";
 
 type ToolLink = {
   label: string;
@@ -134,12 +134,7 @@ export default function LandingNavbar() {
               setMobileOpen(false);
             }}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#0066FF] to-[#06B6D4] p-2 text-white shadow-[0_0_16px_rgba(0,102,255,0.55)]">
-              <Sparkles size={16} />
-            </span>
-            <span className="text-base font-bold tracking-tight text-white sm:text-lg">
-              Creative<span className="text-[#0066FF]">Flow</span>
-            </span>
+            <Logo size={36} wordmarkClassName="text-base font-bold tracking-tight text-white sm:text-lg" />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex">

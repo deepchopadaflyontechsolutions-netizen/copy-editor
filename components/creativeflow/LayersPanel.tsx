@@ -10,7 +10,7 @@ export default function LayersPanel() {
 
   return (
     <Box sx={{ px: 2, py: 1.5 }}>
-      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
         Layers
       </Typography>
       {layers.length === 0 && (

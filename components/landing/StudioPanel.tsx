@@ -540,7 +540,7 @@ export default function StudioPanel({
             {/* Left pane — canvas + carousel */}
             <div className="relative flex h-full w-full min-h-0 flex-col justify-between overflow-hidden bg-black/40 p-4 md:col-span-7">
               {activeItem && (
-                <div className="absolute left-3 top-3 z-10 rounded-md border-2 border-slate-700/60 bg-slate-900/80 px-2.5 py-1 font-mono text-[10px] text-slate-300 backdrop-blur-md">
+                <div className="absolute left-3 top-3 z-10 rounded-md border-2 border-slate-700/60 bg-slate-900/80 px-2.5 py-1 text-[10px] text-slate-300 backdrop-blur-md">
                   {activeItem.width && activeItem.height ? `${activeItem.width} × ${activeItem.height} • ` : ""}
                   {formatLabel(activeItem.file)}
                 </div>
