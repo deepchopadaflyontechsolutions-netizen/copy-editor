@@ -30,13 +30,14 @@ export const button = {
 
 export const text = {
   /** Section header inside a right-panel drawer (matches PanelSection's own title). */
-  sectionTitle: "text-sm font-semibold text-neutral-300",
-  /** Small uppercase label above a sub-group (e.g. "Text watermark", "Format"). */
-  eyebrow: "text-xs font-bold uppercase tracking-wider text-neutral-400",
-  /** Field label above an input. */
-  fieldLabel: "text-xs font-semibold uppercase tracking-wide text-neutral-400",
+  sectionTitle: "text-base font-semibold text-neutral-300",
+  /** Small label above a sub-group (e.g. "Text watermark", "Format") — rendered as typed
+   * (sentence case), not forced to all-caps via CSS. */
+  eyebrow: "text-sm font-bold tracking-wider text-neutral-400",
+  /** Field label above an input — rendered as typed (sentence case), not all-caps. */
+  fieldLabel: "text-sm font-semibold tracking-wide text-neutral-400",
   /** Helper/description copy. */
-  helper: "text-xs leading-relaxed text-neutral-500",
+  helper: "text-sm leading-relaxed text-neutral-500",
 };
 
 /** Radius for card-like containers (grouped controls inside a panel). */

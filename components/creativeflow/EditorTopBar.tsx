@@ -1,46 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Download, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Download, Loader2, Redo2, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 import { MAX_ZOOM, MIN_ZOOM } from "@/lib/canvasEngine/viewport";
-import type { ExportFormat } from "@/types/canvasEngine";
 import Logo from "@/components/Logo";
 import { button } from "./ui";
+
+// Fixed defaults for the one-click Export button — the format/size picker that used to gate
+// every download behind an extra dropdown step is gone; PNG at 1x covers the common case, and
+// nothing else in the app currently offers a way to change these.
+const EXPORT_FORMAT = "png";
+const EXPORT_MULTIPLIER = 1;
 
 export default function EditorTopBar() {
   const { undo, redo, canUndo, canRedo, zoom, setZoom, zoomIn, zoomOut, resetView, hasImage, exportImage } =
     useCanvasEngine();
 
-  const [exportOpen, setExportOpen] = useState(false);
-  const [format, setFormat] = useState<ExportFormat>("png");
-  const [multiplier, setMultiplier] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
   const zoomPercent = Math.round(zoom * 100);
   const zoomMinPercent = Math.round(MIN_ZOOM * 100);
   const zoomMaxPercent = Math.round(MAX_ZOOM * 100);
   const zoomSliderFill = ((zoomPercent - zoomMinPercent) / (zoomMaxPercent - zoomMinPercent)) * 100;
 
-  useEffect(() => {
-    if (!exportOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (exportRef.current && !exportRef.current.contains(event.target as Node)) {
-        setExportOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [exportOpen]);
-
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await exportImage({ format, multiplier });
+      await exportImage({ format: EXPORT_FORMAT, multiplier: EXPORT_MULTIPLIER });
     } finally {
       setIsExporting(false);
-      setExportOpen(false);
     }
   };
 
@@ -119,60 +108,15 @@ export default function EditorTopBar() {
         </span>
       </div>
 
-      <div ref={exportRef} className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => setExportOpen((open) => !open)}
-          disabled={!hasImage}
-          className={`px-4 hover:scale-[1.02] disabled:hover:scale-100 ${button.primary}`}
-        >
-          <Download size={14} />
-          Export
-        </button>
-
-        {exportOpen && (
-          <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl border border-neutral-800 bg-neutral-900 p-3 shadow-2xl shadow-black/40">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">Format</p>
-            <div className="mb-3 flex gap-1.5">
-              {(["png", "jpeg"] as ExportFormat[]).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setFormat(option)}
-                  aria-pressed={format === option}
-                  className={`flex-1 uppercase ${button.chip(format === option)}`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-neutral-500">Size</p>
-            <div className="mb-3 flex gap-1.5">
-              {[1, 2, 4].map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setMultiplier(option)}
-                  aria-pressed={multiplier === option}
-                  className={`flex-1 ${button.chip(multiplier === option)}`}
-                >
-                  {option}x
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void handleExport()}
-              disabled={isExporting}
-              className={`w-full ${button.primary} disabled:opacity-60`}
-            >
-              {isExporting ? "Exporting…" : "Download"}
-            </button>
-          </div>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={() => void handleExport()}
+        disabled={!hasImage || isExporting}
+        className={`shrink-0 px-4 hover:scale-[1.02] disabled:hover:scale-100 ${button.primary}`}
+      >
+        {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+        {isExporting ? "Exporting…" : "Export"}
+      </button>
     </header>
   );
 }

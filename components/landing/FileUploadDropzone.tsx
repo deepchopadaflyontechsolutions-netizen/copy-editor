@@ -133,7 +133,9 @@ export default function FileUploadDropzone({
       {/* Gradient-border dropzone card: electric blue at the top fading to violet at the bottom edge */}
       <div
         className={`relative rounded-3xl bg-gradient-to-b from-blue-500/70 via-blue-500/30 to-violet-500/60 p-px shadow-[0_0_50px_rgba(59,130,246,0.2),0_20px_60px_-15px_rgba(139,92,246,0.25)] transition-shadow duration-300 ${
-          isDragging ? "shadow-[0_0_70px_rgba(59,130,246,0.38),0_20px_70px_-15px_rgba(139,92,246,0.4)]" : ""
+          isDragging
+            ? "shadow-[0_0_70px_rgba(59,130,246,0.38),0_20px_70px_-15px_rgba(139,92,246,0.4)]"
+            : ""
         }`}
       >
         <div
@@ -166,7 +168,11 @@ export default function FileUploadDropzone({
             }`}
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500 shadow-[0_0_18px_rgba(59,130,246,0.55)]">
-              <UploadCloud size={24} strokeWidth={2.25} className="text-[#0B0F19]" />
+              <UploadCloud
+                size={24}
+                strokeWidth={2.25}
+                className="text-[#0B0F19]"
+              />
             </div>
           </div>
 

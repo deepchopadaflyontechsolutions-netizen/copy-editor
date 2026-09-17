@@ -5,15 +5,11 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlignCenter,
-  BringToFront,
   Crop as CropIcon,
-  Eraser,
   FlipHorizontal2,
   FlipVertical2,
-  Move,
   PenLine,
   Radius as RadiusIcon,
-  SendToBack,
 } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 import { useCreativeFlow } from "@/context/CreativeFlowContext";
@@ -23,7 +19,7 @@ import { SWATCHES } from "./panels/swatches";
 const QUICK_COLORS = [SWATCHES[1], SWATCHES[6], SWATCHES[4], SWATCHES[9]];
 const WEIGHT_PRESETS = [2, 6, 12, 20];
 
-type MenuId = "edit" | "flip" | "weight" | "radius" | "opacity" | "position";
+type MenuId = "edit" | "flip" | "weight" | "radius" | "opacity";
 
 interface AnchorRect {
   left: number;
@@ -49,7 +45,6 @@ export default function ContextToolbar() {
     setBrushWidth,
     drawingTool,
     setDrawingTool,
-    reorderLayer,
     moveLayerCenterTo,
     documentSize,
     flipLayerHorizontal,
@@ -57,9 +52,7 @@ export default function ContextToolbar() {
     enterCropMode,
   } = useCanvasEngine();
   const isDrawing = drawingTool === "brush";
-  const isErasing = drawingTool === "eraser";
   const toggleDrawing = () => setDrawingTool(isDrawing ? "selection" : "brush");
-  const toggleErasing = () => setDrawingTool(isErasing ? "selection" : "eraser");
   const { setActiveRightPanelSection } = useCreativeFlow();
 
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
@@ -77,14 +70,12 @@ export default function ContextToolbar() {
   const radiusTriggerRef = useRef<HTMLDivElement>(null);
   const flipTriggerRef = useRef<HTMLDivElement>(null);
   const opacityTriggerRef = useRef<HTMLDivElement>(null);
-  const positionTriggerRef = useRef<HTMLDivElement>(null);
   const triggerRefByMenu: Record<MenuId, React.RefObject<HTMLDivElement | null>> = {
     edit: editTriggerRef,
     weight: weightTriggerRef,
     radius: radiusTriggerRef,
     flip: flipTriggerRef,
     opacity: opacityTriggerRef,
-    position: positionTriggerRef,
   };
 
   useEffect(() => {
@@ -145,7 +136,7 @@ export default function ContextToolbar() {
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.9, y: 8 }}
       transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-      className="pointer-events-auto relative rounded-full border border-neutral-700/80 bg-neutral-900/90 shadow-2xl backdrop-blur-md"
+      className="pointer-events-auto relative h-11 overflow-hidden rounded-full border border-neutral-700/80 bg-neutral-900/90 shadow-2xl backdrop-blur-md"
       onPointerDown={(event) => event.stopPropagation()}
     >
       {/* The row itself is the scrollable element — narrower than its full button
@@ -153,10 +144,13 @@ export default function ContextToolbar() {
           of overflowing off both edges or squeezing every icon down to fit. Dropdown
           menus deliberately live outside this element (portaled — see `Dropdown`),
           since an `overflow-x` scroll container also clips `overflow-y` per the CSS
-          spec, which would otherwise cut off every dropdown at the row's own height. */}
+          spec, which would otherwise cut off every dropdown at the row's own height.
+          The pill itself is pinned to a fixed height with `overflow-hidden` (above)
+          so this row's horizontal scrolling can never grow the pill or let a
+          browser-drawn scrollbar poke out past its rounded edge while scrolling. */}
       <div
         ref={scrollRef}
-        className="no-scrollbar flex max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto p-1.5 *:shrink-0"
+        className="no-scrollbar flex h-full max-w-[calc(100vw-1.5rem)] items-center gap-1 overflow-x-auto p-1.5 *:shrink-0"
       >
         {/* Action group */}
         <div ref={editTriggerRef}>
@@ -164,20 +158,13 @@ export default function ContextToolbar() {
             type="button"
             onClick={() => toggleMenu("edit")}
             aria-pressed={openMenu === "edit"}
-            className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+            className={`flex h-8 shrink-0 cursor-pointer items-center rounded-full px-3 text-xs font-semibold leading-none transition-colors ${
               openMenu === "edit" ? "bg-neutral-700 text-white" : "bg-neutral-800 text-neutral-100 hover:bg-neutral-700"
             }`}
           >
             Edit
           </button>
         </div>
-
-        <Divider />
-
-        {/* Tools & FX group */}
-        <ToolbarIconButton label={isErasing ? "Stop erasing (Esc)" : "Eraser"} onClick={toggleErasing} active={isErasing}>
-          <Eraser size={16} />
-        </ToolbarIconButton>
 
         <Divider />
 
@@ -259,11 +246,12 @@ export default function ContextToolbar() {
           </ToolbarIconButton>
         </div>
 
-        <div ref={positionTriggerRef}>
-          <ToolbarIconButton label="Position" onClick={() => toggleMenu("position")} active={openMenu === "position"}>
-            <Move size={16} />
-          </ToolbarIconButton>
-        </div>
+        <ToolbarIconButton
+          label="Align Center"
+          onClick={() => activeLayerId && moveLayerCenterTo(activeLayerId, documentSize.width / 2, documentSize.height / 2)}
+        >
+          <AlignCenter size={16} />
+        </ToolbarIconButton>
       </div>
 
       <Dropdown open={openMenu === "edit"} width={220} anchor={anchorRect}>
@@ -361,34 +349,6 @@ export default function ContextToolbar() {
         />
       </Dropdown>
 
-      <Dropdown open={openMenu === "position"} width={180} anchor={anchorRect}>
-        <div className="flex flex-col gap-0.5">
-          <button
-            type="button"
-            onClick={() => activeLayerId && reorderLayer(activeLayerId, "up")}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
-          >
-            <BringToFront size={14} />
-            Bring Forward
-          </button>
-          <button
-            type="button"
-            onClick={() => activeLayerId && reorderLayer(activeLayerId, "down")}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
-          >
-            <SendToBack size={14} />
-            Send Backward
-          </button>
-          <button
-            type="button"
-            onClick={() => activeLayerId && moveLayerCenterTo(activeLayerId, documentSize.width / 2, documentSize.height / 2)}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-neutral-300 transition-colors hover:bg-neutral-800"
-          >
-            <AlignCenter size={14} />
-            Align Center
-          </button>
-        </div>
-      </Dropdown>
     </motion.div>
   );
 }
@@ -458,6 +418,11 @@ function Dropdown({
   );
 }
 
+/** Tooltip is portaled to `document.body` (like `Dropdown` above) rather than absolutely
+ * positioned inside the button — the toolbar pill is a fixed-height, `overflow-hidden` scroll
+ * container (so its own horizontal scrollbar never grows the pill), which would otherwise clip
+ * an in-place tooltip. Portaling also means the tooltip never reserves layout space or affects
+ * the pill's height/scroll area — it just floats above everything at a measured screen position. */
 function ToolbarIconButton({
   label,
   onClick,
@@ -471,23 +436,50 @@ function ToolbarIconButton({
   disabled?: boolean;
   children: ReactNode;
 }) {
+  const [hovered, setHovered] = useState(false);
+  const [rect, setRect] = useState<{ left: number; bottom: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const showTooltip = () => {
+    const el = buttonRef.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    setRect({ left: box.left + box.width / 2, bottom: box.bottom });
+    setHovered(true);
+  };
+  const hideTooltip = () => setHovered(false);
+
   return (
-    <div className="group relative">
+    <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         aria-label={label}
         aria-pressed={active}
         onClick={onClick}
         disabled={disabled}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        onFocus={showTooltip}
+        onBlur={hideTooltip}
         className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
           active ? "bg-white text-black" : "text-neutral-300 hover:bg-neutral-800 hover:text-white"
         }`}
       >
         {children}
       </button>
-      <span className="pointer-events-none absolute left-1/2 top-full z-40 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-neutral-100 opacity-0 shadow-lg transition-opacity duration-100 group-hover:opacity-100">
-        {label}
-      </span>
+      {hovered &&
+        rect &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            style={{ position: "fixed", left: rect.left, top: rect.bottom + 6, transform: "translateX(-50%)" }}
+            className="pointer-events-none z-40 whitespace-nowrap rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-neutral-100 shadow-lg"
+          >
+            {label}
+          </span>,
+          document.body,
+        )}
     </div>
   );
 }

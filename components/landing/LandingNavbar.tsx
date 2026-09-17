@@ -10,6 +10,7 @@ import {
   FileArchive,
   FileVideo,
   Film,
+  Image as ImageIcon,
   Layers,
   Menu,
   Palette,
@@ -84,13 +85,52 @@ const VIDEO_TOOLS: ToolLink[] = [
   },
 ];
 
-type DropdownKey = "video" | "image" | null;
+type DropdownKey = "video" | "image" | "editor" | null;
+
+const EDITOR_LINKS: ToolLink[] = [
+  {
+    label: "Image Editor",
+    description: "Crop, retouch, remove backgrounds",
+    icon: ImageIcon,
+    href: "/editor",
+  },
+  {
+    label: "Video Editor",
+    description: "Trim, transitions, captions & audio",
+    icon: Film,
+    href: "/video-editor",
+  },
+];
 
 export default function LandingNavbar() {
   const [openDropdown, setOpenDropdown] = useState<DropdownKey>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState<DropdownKey>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  // Closing on a short delay (rather than the instant mouseleave fires) means moving the
+  // cursor diagonally from the button down into the panel below it doesn't flicker the menu
+  // shut in the gap between them — re-entering either the button or the panel before the timer
+  // fires cancels it.
+  const editorCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openEditorMenu = () => {
+    if (editorCloseTimerRef.current) {
+      clearTimeout(editorCloseTimerRef.current);
+      editorCloseTimerRef.current = null;
+    }
+    setOpenDropdown("editor");
+  };
+  const scheduleCloseEditorMenu = () => {
+    editorCloseTimerRef.current = setTimeout(() => {
+      setOpenDropdown((current) => (current === "editor" ? null : current));
+    }, 150);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (editorCloseTimerRef.current) clearTimeout(editorCloseTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -124,7 +164,7 @@ export default function LandingNavbar() {
       <div className="pointer-events-auto">
         <div
           ref={navRef}
-          className="flex items-center justify-between gap-6 rounded-full border-2 border-slate-700/50 bg-slate-950/70 px-6 py-2.5 shadow-lg shadow-black/40 ring-1 ring-inset ring-white/5 backdrop-blur-lg backdrop-saturate-150 sm:gap-10"
+          className="flex items-center justify-between gap-3 rounded-full border-2 border-slate-700/50 bg-slate-950/70 px-6 py-2.5 shadow-lg shadow-black/40 ring-1 ring-inset ring-white/5 backdrop-blur-lg backdrop-saturate-150 sm:gap-10 lg:gap-4 lg:px-4 xl:gap-10 xl:px-6"
         >
           <Link
             href="/"
@@ -134,10 +174,10 @@ export default function LandingNavbar() {
               setMobileOpen(false);
             }}
           >
-            <Logo size={36} wordmarkClassName="text-base font-bold tracking-tight text-white sm:text-lg" />
+            <Logo size={36} wordmarkClassName="text-base font-bold tracking-tight text-white sm:text-lg lg:text-base xl:text-lg" />
           </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-center gap-0.5 lg:flex xl:gap-1">
             <NavDropdown
               label="Video Tools"
               items={VIDEO_TOOLS}
@@ -160,14 +200,14 @@ export default function LandingNavbar() {
             />
             <Link
               href="/#how-it-works"
-              className="rounded-full px-3.5 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-white"
+              className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-2 text-[13px] font-medium text-slate-300 transition-colors hover:text-white lg:text-[13px] xl:px-3.5 xl:text-sm"
             >
               How it works
             </Link>
 
             <Link
               href="/#faq"
-              className="rounded-full px-3.5 py-2 text-sm font-medium text-slate-300 transition-colors hover:text-white"
+              className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-2 text-[13px] font-medium text-slate-300 transition-colors hover:text-white lg:text-[13px] xl:px-3.5 xl:text-sm"
             >
               FAQ
             </Link>
@@ -178,12 +218,47 @@ export default function LandingNavbar() {
                 the reference layout, but intentionally not a link so it doesn't promise a
                 flow that isn't there. */}
 
-            <Link
-              href="/editor"
-              className="rounded-full bg-[#0066FF] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#0066FF]/25 transition-transform hover:scale-[1.03] hover:bg-[#1a75ff] active:scale-[0.98] sm:px-5 sm:py-2.5"
+            <div
+              className="relative"
+              onMouseEnter={openEditorMenu}
+              onMouseLeave={scheduleCloseEditorMenu}
             >
-              Go to Editor
-            </Link>
+              <button
+                type="button"
+                aria-haspopup="true"
+                aria-expanded={openDropdown === "editor"}
+                onClick={() =>
+                  setOpenDropdown((current) =>
+                    current === "editor" ? null : "editor",
+                  )
+                }
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#0066FF] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#0066FF]/25 transition-transform hover:scale-[1.03] hover:bg-[#1a75ff] active:scale-[0.98] sm:px-5 sm:py-2.5 lg:px-3.5 lg:py-2 lg:text-[13px] xl:px-5 xl:py-2.5 xl:text-sm"
+              >
+                Go to Editor
+                <ChevronDown
+                  size={14}
+                  className={clsx(
+                    "transition-transform duration-200",
+                    openDropdown === "editor" && "rotate-180",
+                  )}
+                />
+              </button>
+
+              {openDropdown === "editor" && (
+                <div className="absolute right-0 top-full mt-3 w-64 rounded-2xl border-2 border-white/10 bg-[#0F172A] p-2 shadow-2xl shadow-black/40">
+                  {EDITOR_LINKS.map((item) => (
+                    <ToolMenuItem
+                      key={item.label}
+                      item={item}
+                      onNavigate={() => {
+                        if (editorCloseTimerRef.current) clearTimeout(editorCloseTimerRef.current);
+                        setOpenDropdown(null);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -268,7 +343,7 @@ function NavDropdown({
         aria-expanded={isOpen}
         onClick={onToggle}
         className={clsx(
-          "flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-medium transition-colors",
+          "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-2 text-[13px] font-medium transition-colors xl:px-3.5 xl:text-sm",
           isOpen ? "text-white" : "text-slate-300 hover:text-white",
         )}
       >
@@ -293,7 +368,7 @@ function NavDropdown({
   );
 }
 
-function ToolMenuItem({ item }: { item: ToolLink }) {
+function ToolMenuItem({ item, onNavigate }: { item: ToolLink; onNavigate?: () => void }) {
   const Icon = item.icon;
   const content = (
     <>
@@ -327,6 +402,7 @@ function ToolMenuItem({ item }: { item: ToolLink }) {
   return (
     <Link
       href={item.href}
+      onClick={onNavigate}
       className="flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/5"
     >
       {content}

@@ -109,6 +109,41 @@ function loadImageElement(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
+const WATERMARK_FONT_SIZE = 56;
+const WATERMARK_FONT = `700 ${WATERMARK_FONT_SIZE}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+const WATERMARK_PADDING = WATERMARK_FONT_SIZE * 0.35;
+
+/**
+ * Rasterizes `text` onto a transparent PNG and decodes it back into an `HTMLImageElement` —
+ * so a "text watermark" can be added as a perfectly ordinary image layer (`createImageLayer`)
+ * and get move/resize/rotate/opacity/reorder/delete for free from the exact same machinery
+ * every uploaded photo or logo already goes through, rather than teaching every layer
+ * consumer (render, crop, thumbnails, export) a second "text" content type.
+ */
+function rasterizeWatermarkText(text: string): HTMLCanvasElement | null {
+  const measureCanvas = document.createElement("canvas");
+  const measureCtx = measureCanvas.getContext("2d");
+  if (!measureCtx) return null;
+  measureCtx.font = WATERMARK_FONT;
+  const textWidth = Math.max(1, Math.ceil(measureCtx.measureText(text).width));
+  const textHeight = Math.ceil(WATERMARK_FONT_SIZE * 1.25);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = textWidth + WATERMARK_PADDING * 2;
+  canvas.height = textHeight + WATERMARK_PADDING * 2;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.font = WATERMARK_FONT;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+  ctx.shadowBlur = 6;
+  ctx.fillText(text, WATERMARK_PADDING, canvas.height / 2);
+  return canvas;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -145,6 +180,7 @@ interface CanvasEngineContextValue {
   addImageLayer: (file: File) => Promise<void>;
   addTextWatermark: (text: string) => void;
   resizeDocument: (widthPx: number, heightPx: number) => void;
+  resetToOriginalSize: () => void;
   getLayerThumbnail: (id: string) => string | null;
   removeBackground: () => Promise<void>;
   isRemovingBackground: boolean;
@@ -199,6 +235,7 @@ interface CanvasEngineContextValue {
   enterCropMode: (initial?: { preset: CropPresetKey; ratio: number }) => void;
   cancelCropMode: () => void;
   applyCrop: () => void;
+  applyCropToRatio: (ratio: number) => void;
   resetCrop: () => void;
   cropRect: Rect | null;
   cropImageBox: Rect | null;
@@ -575,10 +612,37 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
   );
 
   const addTextWatermark = useCallback(
-    (_text: string) => {
-      showNotice("Text layers — coming soon");
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || !hasImage) return;
+
+      const rasterized = rasterizeWatermarkText(trimmed);
+      if (!rasterized) {
+        showNotice("Couldn't add that text — try again");
+        return;
+      }
+      const image = await loadImageElement(rasterized.toDataURL("image/png"));
+      const layer = createImageLayer(image, "Text");
+
+      // Centered and sized relative to the page (like a logo) rather than at native
+      // raster size — a watermark typed at 56px would otherwise render enormous on a
+      // small page or tiny on a large one. Fully draggable/resizable afterward via the
+      // same handles every other layer uses.
+      const scale = Math.min((documentSize.width * 0.6) / image.naturalWidth, 1.5);
+      layer.transform = {
+        ...layer.transform,
+        scaleX: scale,
+        scaleY: scale,
+        x: (documentSize.width - image.naturalWidth * scale) / 2,
+        y: (documentSize.height - image.naturalHeight * scale) / 2,
+      };
+
+      const next = [...layers, layer];
+      setLayers(next);
+      setActiveLayerIdState(layer.id);
+      commitHistorySnapshot(next);
     },
-    [showNotice],
+    [commitHistorySnapshot, createImageLayer, documentSize.height, documentSize.width, hasImage, layers, showNotice],
   );
 
   const removeBackground = useCallback(async () => {
@@ -852,6 +916,34 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
   const undo = useCallback(() => { if (historyIndex > 0) jumpToHistory(historyIndex - 1); }, [historyIndex, jumpToHistory]);
   const redo = useCallback(() => { if (historyIndex < history.length - 1) jumpToHistory(historyIndex + 1); }, [historyIndex, history.length, jumpToHistory]);
 
+  // Ctrl/Cmd+Z (undo) and Ctrl/Cmd+Shift+Z or Ctrl+Y (redo) — the buttons in the top bar
+  // were the only way to move through history before this; Ctrl+Z always did nothing. Skips
+  // form fields so it doesn't fight a text input's own native undo (e.g. while typing a
+  // dimension or watermark text), and only reads `canUndo`/`canRedo`/`undo`/`redo` — no re-
+  // implementation of the history logic itself.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable) return;
+
+      const isRedo = key === "y" || (key === "z" && event.shiftKey);
+      const isUndo = key === "z" && !event.shiftKey;
+
+      if (isUndo && canUndo) {
+        event.preventDefault();
+        undo();
+      } else if (isRedo && canRedo) {
+        event.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canUndo, canRedo, undo, redo]);
+
   // --- Crop (native canvas engine — plain object-space math, no canvas library involved) ---
   const [cropSession, setCropSession] = useState<CropSessionState | null>(null);
   const cropSessionRef = useRef<CropSessionState | null>(null);
@@ -965,9 +1057,95 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
     commitHistorySnapshot(next);
   }, [commitHistorySnapshot, layers]);
 
+  // One-shot version of enterCropMode + applyCrop, for the Resize panel's plain "Crop" button
+  // (Width/Height fields, no interactive frame step): builds the ratio-fitted crop session and
+  // commits it in the same call, rather than round-tripping through `setCropSession` state first
+  // — going through state here would hit the exact stale-`cropSessionRef` problem `enterCropMode`'s
+  // own comment above warns about (a same-tick follow-up call reads last render's still-null ref).
+  const applyCropToRatio = useCallback(
+    (ratio: number) => {
+      if (!hasImage || !Number.isFinite(ratio) || ratio <= 0) return;
+      const targetId = activeLayerId ?? baseLayerIdRef.current;
+      const layer = layers.find((l) => l.id === targetId);
+      if (!layer) return;
+      const rawSession = createCropSession(layer);
+      const centeredImageBox: Rect = {
+        ...rawSession.imageBox,
+        x: (documentSize.width - rawSession.imageBox.width) / 2,
+        y: (documentSize.height - rawSession.imageBox.height) / 2,
+      };
+      const session: CropSessionState = {
+        ...rawSession,
+        imageBox: centeredImageBox,
+        preset: "free",
+        aspectLocked: true,
+        aspectRatio: ratio,
+        cropRect: fitCropRectToRatio(cropRatioBounds(centeredImageBox), ratio),
+      };
+      const patch = commitCrop(session);
+      const next = layers.map((l) =>
+        l.id === session.layerId
+          ? {
+              ...l,
+              transform: { ...l.transform, x: patch.x, y: patch.y, width: patch.width, height: patch.height },
+              image: { ...l.image, cropX: patch.cropX, cropY: patch.cropY },
+            }
+          : l,
+      );
+      setLayers(next);
+      commitHistorySnapshot(next);
+    },
+    [activeLayerId, hasImage, layers, documentSize, cropRatioBounds, commitHistorySnapshot],
+  );
+
   const resetCrop = useCallback(() => {
     setCropSession((prev) => (prev ? { ...prev, cropRect: { ...prev.imageBox }, aspectLocked: false, preset: "free" } : prev));
   }, []);
+
+  // Undoes every crop/resize applied to the base photo since it was loaded — unlike
+  // `resizeDocument` (which only reshapes the page frame and leaves layer crops alone),
+  // this restores the base layer's own `image.cropX/cropY` and `transform.width/height`
+  // back to its native pixel dimensions, then re-fits both the page and that layer to
+  // the image's original aspect ratio exactly the way the initial upload did. Any
+  // in-progress crop session is discarded first so it can't immediately re-apply a
+  // stale crop rect on top of the restored layer.
+  const resetToOriginalSize = useCallback(() => {
+    const baseId = baseLayerIdRef.current;
+    const baseLayer = layers.find((l) => l.id === baseId);
+    if (!baseLayer) return;
+
+    cropDragRef.current = null;
+    setShowGridState(showGridBeforeCropRef.current);
+    setCropSession(null);
+
+    const { naturalWidth, naturalHeight } = baseLayer.image;
+    documentAspectRatioRef.current = naturalWidth / naturalHeight;
+    const next = fitDocument();
+
+    const nextLayers = layers.map((l) =>
+      l.id === baseId
+        ? {
+            ...l,
+            transform: {
+              ...l.transform,
+              x: 0,
+              y: 0,
+              width: naturalWidth,
+              height: naturalHeight,
+              scaleX: next.width / naturalWidth,
+              scaleY: next.height / naturalHeight,
+              rotation: 0,
+              flipX: false,
+              flipY: false,
+            },
+            image: { ...l.image, cropX: 0, cropY: 0 },
+          }
+        : l,
+    );
+    setLayers(nextLayers);
+    selectLayer(baseId as string);
+    commitHistorySnapshot(nextLayers);
+  }, [commitHistorySnapshot, fitDocument, layers, selectLayer]);
 
   const setCropAspectLocked = useCallback((locked: boolean) => {
     setCropSession((prev) => {
@@ -1362,6 +1540,7 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       addImageLayer,
       addTextWatermark,
       resizeDocument,
+      resetToOriginalSize,
       getLayerThumbnail,
       removeBackground,
       isRemovingBackground,
@@ -1409,6 +1588,7 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       enterCropMode,
       cancelCropMode,
       applyCrop,
+      applyCropToRatio,
       resetCrop,
       cropRect: cropSession?.cropRect ?? null,
       cropImageBox: cropSession?.imageBox ?? null,
@@ -1474,6 +1654,7 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       addImageLayer,
       addTextWatermark,
       resizeDocument,
+      resetToOriginalSize,
       getLayerThumbnail,
       removeBackground,
       isRemovingBackground,
@@ -1519,6 +1700,7 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
       enterCropMode,
       cancelCropMode,
       applyCrop,
+      applyCropToRatio,
       resetCrop,
       cropSession,
       cropPixelSize,

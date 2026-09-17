@@ -14,6 +14,16 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(decimals)} ${BYTE_UNITS[exponent]}`;
 }
 
+/** Zero-padded `00:00.0` timecode (minutes:seconds.deciseconds) — one decimal of sub-second
+ * precision, for trim handles and other places that need finer feedback than a plain `m:ss`. */
+export function formatPreciseTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00.0";
+  const mins = Math.floor(seconds / 60);
+  const wholeSecs = Math.floor(seconds % 60);
+  const deciseconds = Math.floor((seconds * 10) % 10);
+  return `${mins.toString().padStart(2, "0")}:${wholeSecs.toString().padStart(2, "0")}.${deciseconds}`;
+}
+
 const MIME_LABEL_OVERRIDES: Record<string, string> = {
   "image/jpeg": "JPEG",
   "image/svg+xml": "SVG",

@@ -37,7 +37,6 @@ export default function ResizePanel() {
   const {
     hasImage,
     documentSize,
-    resizeDocument,
     originalImageSize,
     activeLayerId,
     baseLayerId,
@@ -48,8 +47,11 @@ export default function ResizePanel() {
     enterCropMode,
     cancelCropMode,
     applyCrop,
+    applyCropToRatio,
     applyCropPreset,
     applyCropCustomRatio,
+    resetToOriginalSize,
+    engineLayers,
   } = useCanvasEngine();
   const [locked, setLocked] = useState(true);
   const [widthDraft, setWidthDraft] = useState<string | null>(null);
@@ -82,17 +84,27 @@ export default function ResizePanel() {
     }
   };
 
-  const applySize = (w: number, h: number) => {
+  // The panel's plain "Crop" button (as opposed to the aspect-ratio cards/custom-ratio flow
+  // below, which open an interactive frame the user drags before hitting Apply): typing exact
+  // Width/Height and clicking Crop should immediately crop the photo to that ratio and save it —
+  // no separate confirm step. If an interactive crop frame happens to already be open, this just
+  // commits it instead, so the button always means "finish the crop right now" either way.
+  const handleCropClick = () => {
+    if (!hasImage) return;
+    if (cropMode) {
+      applyCrop();
+      return;
+    }
+    const w = Number(width);
+    const h = Number(height);
     if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
-    setWidthDraft(null);
-    setHeightDraft(null);
-    resizeDocument(Math.round(w), Math.round(h));
+    if (!activeLayerId && baseLayerId) selectLayer(baseLayerId);
+    applyCropToRatio(w / h);
   };
 
   // Picking a shape opens the same interactive crop session the canvas
   // toolbar's Crop icon starts — full image visible, dimmed outside the
   // frame, draggable handles — instead of silently resizing the whole page.
-  // Nothing about the plain Width/Height "Resize" flow above changes.
   //
   // Starting a fresh session passes the ratio straight into `enterCropMode`
   // rather than calling `applyCropPreset` right after — the two need to
@@ -104,8 +116,6 @@ export default function ResizePanel() {
     if (cropMode) applyCropPreset(key);
     else enterCropMode({ preset: key, ratio });
   };
-
-  const handleApplyCustom = () => applySize(Number(width), Number(height));
 
   const parsedCustomRatioW = Number(customRatioW);
   const parsedCustomRatioH = Number(customRatioH);
@@ -125,13 +135,24 @@ export default function ResizePanel() {
 
   const handleResetToOriginal = () => {
     if (!originalImageSize) return;
-    applySize(originalImageSize.width, originalImageSize.height);
+    setWidthDraft(null);
+    setHeightDraft(null);
+    resetToOriginalSize();
   };
 
+  // Whether the base photo is still exactly as it was on load — checked against its own
+  // crop/transform, not `documentSize` (the page frame), since a crop only ever touches
+  // the layer and leaves the page frame's pixel numbers alone (see `resetToOriginalSize`).
+  const baseLayer = engineLayers.find((l) => l.id === baseLayerId);
   const isAtOriginalSize =
-    !!originalImageSize &&
-    Math.round(documentSize.width) === originalImageSize.width &&
-    Math.round(documentSize.height) === originalImageSize.height;
+    !!baseLayer &&
+    baseLayer.image.cropX === 0 &&
+    baseLayer.image.cropY === 0 &&
+    baseLayer.transform.width === baseLayer.image.naturalWidth &&
+    baseLayer.transform.height === baseLayer.image.naturalHeight &&
+    baseLayer.transform.rotation === 0 &&
+    !baseLayer.transform.flipX &&
+    !baseLayer.transform.flipY;
 
   // A preset card is "active" once it's the shape actually driving the live
   // crop frame. "Custom ratio" reuses the same "free" preset the freeform
@@ -206,12 +227,12 @@ export default function ResizePanel() {
 
       <button
         type="button"
-        onClick={handleApplyCustom}
+        onClick={handleCropClick}
         disabled={!hasImage}
         className={`mt-3.5 w-full ${button.primary}`}
       >
         <Crop size={14} strokeWidth={2.25} />
-        Crop
+        {cropMode ? "Apply crop" : "Crop"}
       </button>
 
       <h4 className={`mb-2.5 mt-6 ${text.sectionTitle}`}>Aspect ratio</h4>

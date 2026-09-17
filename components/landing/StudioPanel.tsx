@@ -12,16 +12,15 @@ import {
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  Captions,
   Clapperboard,
   CloudUpload,
   Crop,
   Eraser,
-  FileArchive,
   Film,
   Images,
   Layers,
   Loader2,
+  Music,
   Palette,
   Plus,
   Scissors,
@@ -110,25 +109,22 @@ const VIDEO_QUICK_ACTIONS: QuickAction[] = [
     label: "Trim & Cut",
     description: "Precision timeline editing",
     Icon: Scissors,
-    href: "/trim-cut",
+    href: "/video-editor",
     accent: "blue",
-    soon: true,
   },
   {
-    label: "Compress",
-    description: "Shrink file size, keep quality",
-    Icon: FileArchive,
-    href: "/compress-video",
-    accent: "emerald",
-    soon: true,
-  },
-  {
-    label: "Add Subtitles",
-    description: "Auto-generate & burn in captions",
-    Icon: Captions,
-    href: "/add-subtitles",
+    label: "Crop",
+    description: "Reframe to any aspect ratio",
+    Icon: Crop,
+    href: "/video-editor?panel=frame",
     accent: "purple",
-    soon: true,
+  },
+  {
+    label: "Background Audio",
+    description: "Layer music underneath your clip",
+    Icon: Music,
+    href: "/video-editor?panel=audio",
+    accent: "emerald",
   },
 ];
 
@@ -383,7 +379,11 @@ export default function StudioPanel({
       try {
         const assetId = generateUUID();
         await saveAsset(assetId, activeItem.file);
-        router.push(`${href}?assetId=${assetId}`);
+        // Some hrefs already carry their own query string (e.g. "/video-editor?panel=frame"
+        // deep-linking straight to a panel) — appending with a bare "?" there would produce a
+        // malformed "...?panel=frame?assetId=..." URL.
+        const separator = href.includes("?") ? "&" : "?";
+        router.push(`${href}${separator}assetId=${assetId}`);
       } catch {
         setIsBusy(false);
         showError("Couldn't prepare that file. Please try again.");
