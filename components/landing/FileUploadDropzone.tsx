@@ -93,14 +93,14 @@ export default function FileUploadDropzone({
 
   return (
     <div className="relative mx-auto w-full max-w-2xl px-4 py-6">
-      <p className="mx-auto mb-8 max-w-md text-center text-sm text-slate-400">
+      <p className="mx-auto mb-8 max-w-md text-center text-sm text-neutral-400">
         No installs, no plugins, nothing to download. Drop a file in and start
         editing in seconds.
       </p>
 
       {/* Segmented mode toggle */}
       <div className="mb-5 flex justify-center">
-        <div className="flex items-center gap-1 rounded-full border border-white/10 bg-slate-900/80 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_24px_rgba(59,130,246,0.08)] backdrop-blur-xl">
+        <div className="flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900/80 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl">
           <button
             type="button"
             aria-label="Image mode"
@@ -108,8 +108,8 @@ export default function FileUploadDropzone({
             onClick={() => setMode("image")}
             className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
               mode === "image"
-                ? "bg-blue-600 text-white shadow-[0_0_16px_rgba(59,130,246,0.55)]"
-                : "text-slate-500 hover:text-slate-300"
+                ? "bg-white text-black shadow-md shadow-black/20"
+                : "text-neutral-500 hover:text-neutral-300"
             }`}
           >
             <ImageIcon size={16} />
@@ -121,8 +121,8 @@ export default function FileUploadDropzone({
             onClick={() => setMode("video")}
             className={`flex h-9 w-9 items-center justify-center rounded-full transition-all duration-200 ${
               mode === "video"
-                ? "bg-blue-600 text-white shadow-[0_0_16px_rgba(59,130,246,0.55)]"
-                : "text-slate-500 hover:text-slate-300"
+                ? "bg-white text-black shadow-md shadow-black/20"
+                : "text-neutral-500 hover:text-neutral-300"
             }`}
           >
             <Film size={16} />
@@ -130,12 +130,10 @@ export default function FileUploadDropzone({
         </div>
       </div>
 
-      {/* Gradient-border dropzone card: electric blue at the top fading to violet at the bottom edge */}
+      {/* Bordered dropzone card, matching the editor's neutral chrome */}
       <div
-        className={`relative rounded-3xl bg-gradient-to-b from-blue-500/70 via-blue-500/30 to-violet-500/60 p-px shadow-[0_0_50px_rgba(59,130,246,0.2),0_20px_60px_-15px_rgba(139,92,246,0.25)] transition-shadow duration-300 ${
-          isDragging
-            ? "shadow-[0_0_70px_rgba(59,130,246,0.38),0_20px_70px_-15px_rgba(139,92,246,0.4)]"
-            : ""
+        className={`relative rounded-3xl border border-neutral-800 shadow-xl shadow-black/40 transition-shadow duration-300 ${
+          isDragging ? "shadow-2xl shadow-black/50 border-neutral-600" : ""
         }`}
       >
         <div
@@ -148,8 +146,8 @@ export default function FileUploadDropzone({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`flex cursor-pointer flex-col items-center justify-center gap-5 rounded-[calc(1.5rem-1px)] bg-[#0B0F19]/95 px-8 py-14 text-center outline-none backdrop-blur-xl transition-colors duration-200 ${
-            isDragging ? "bg-[#0B0F19]/85" : ""
+          className={`flex cursor-pointer flex-col items-center justify-center gap-5 rounded-[calc(1.5rem-1px)] bg-neutral-950/95 px-8 py-14 text-center outline-none backdrop-blur-xl transition-colors duration-200 ${
+            isDragging ? "bg-neutral-950/85" : ""
           }`}
         >
           <input
@@ -163,27 +161,27 @@ export default function FileUploadDropzone({
           />
 
           <div
-            className={`flex h-20 w-20 items-center justify-center rounded-2xl border border-blue-500/30 bg-blue-950/40 shadow-[0_0_28px_rgba(59,130,246,0.3)] transition-transform duration-200 ${
+            className={`flex h-20 w-20 items-center justify-center rounded-2xl border border-neutral-700 bg-neutral-900 shadow-lg shadow-black/30 transition-transform duration-200 ${
               isDragging ? "scale-110" : ""
             }`}
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500 shadow-[0_0_18px_rgba(59,130,246,0.55)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-md shadow-black/20">
               <UploadCloud
                 size={24}
                 strokeWidth={2.25}
-                className="text-[#0B0F19]"
+                className="text-black"
               />
             </div>
           </div>
 
           <div>
-            <p className="text-xl font-semibold text-slate-100 sm:text-2xl">
+            <p className="text-xl font-semibold text-neutral-100 sm:text-2xl">
               Drag &amp; drop your images here, or{" "}
-              <span className="text-blue-400 underline decoration-blue-400/70 underline-offset-4 transition-colors duration-200 hover:text-blue-300 hover:decoration-blue-300">
+              <span className="text-white underline decoration-white/50 underline-offset-4 transition-colors duration-200 hover:text-neutral-300">
                 click to browse
               </span>
             </p>
-            <p id={`${inputId}-hint`} className="mt-2 text-sm text-slate-400">
+            <p id={`${inputId}-hint`} className="mt-2 text-sm text-neutral-400">
               Supports JPG, PNG, WebP — Max 25MB — up to 5 files
             </p>
           </div>
@@ -192,7 +190,7 @@ export default function FileUploadDropzone({
             {FORMAT_CHIPS[mode].map((chip) => (
               <span
                 key={chip}
-                className="rounded-full border border-slate-700/50 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-300"
+                className="rounded-full border border-neutral-700 bg-neutral-800/60 px-3 py-1 text-xs font-medium text-neutral-300"
               >
                 {chip}
               </span>

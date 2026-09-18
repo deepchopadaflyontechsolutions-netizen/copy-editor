@@ -41,6 +41,10 @@ export default function EditorTopBar() {
         <Logo size={36} wordmarkClassName="hidden text-base font-bold tracking-tight text-white sm:inline" />
       </Link>
 
+      <span className="hidden shrink-0 rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 sm:inline-block">
+        Image
+      </span>
+
       <div className="flex-1" />
 
       <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-neutral-800 bg-neutral-900/60 p-0.5">

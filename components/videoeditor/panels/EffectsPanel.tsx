@@ -38,7 +38,10 @@ export default function EffectsPanel() {
         <p className={text.helper}>
           Applied to <span className="text-neutral-300">{clip.fileName}</span> — live in the preview, and carried into Export.
         </p>
-        <div className="grid grid-cols-2 gap-2.5">
+        {/* 2-up on narrow phones, 3-up once the (full-width, `md:hidden`) mobile sheet has room
+            for it, back to 2-up on the fixed 320px desktop drawer — sized to match at each
+            step so a tile never looks oversized for its column. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2 md:grid-cols-2 md:gap-2.5">
           {PRESETS.map(({ id, label, icon: Icon }) => {
             const isActive = clip.effect === id;
             return (
@@ -47,13 +50,14 @@ export default function EffectsPanel() {
                 type="button"
                 onClick={() => updateClipEffect(clip.id, id)}
                 aria-pressed={isActive}
-                className={`flex flex-col items-center gap-1.5 rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${
+                className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors md:gap-1.5 md:px-3 md:py-3 md:text-sm ${
                   isActive
                     ? "border-white/25 bg-white/10 text-white"
                     : "border-neutral-700 bg-neutral-800/40 text-neutral-400 hover:border-neutral-600 hover:text-neutral-200"
                 }`}
               >
-                <Icon size={18} />
+                <Icon size={15} className="md:hidden" />
+                <Icon size={18} className="hidden md:block" />
                 {label}
               </button>
             );

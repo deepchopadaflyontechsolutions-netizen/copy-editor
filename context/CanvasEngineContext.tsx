@@ -1314,7 +1314,12 @@ export function CanvasEngineProvider({ children, initialImageFile = null, initia
   // the document — picking a different ratio preset, switching right-panel
   // tabs, closing the mobile sheet — and would commit the crop with
   // whatever (possibly stale/zero-size) rect happened to be current at that
-  // instant, occasionally cropping the image down to nothing.
+  // instant, occasionally cropping the image down to nothing. `data-crop-ui`
+  // wraps the whole page/canvas box (see CanvasWorkspace's `containerRef`),
+  // not just the crop frame's own handles — so this only fires for clicks in
+  // the empty padding *around* the page, never on the image itself, the crop
+  // frame, or its drag handles (those are hit-tested by the workspace's own
+  // pointer controller instead, and stay live regardless).
   useEffect(() => {
     if (!cropMode) return;
     const handlePointerDown = (event: PointerEvent) => {

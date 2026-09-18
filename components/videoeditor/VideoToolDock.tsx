@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } from "react";
+import { useEffect, useRef, type ComponentType, type KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { UploadCloud, Crop, Type, Music, Gauge, Wand2, X, ChevronLeft, Pencil } from "lucide-react";
 import { useVideoEditor, type VideoPanelSectionId } from "@/context/VideoEditorContext";
@@ -37,10 +37,15 @@ const FOCUS_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visibl
 // the two editors' tab sets, gating condition (hasVideo vs hasImage), and panels are
 // unrelated — only the visual chrome is meant to match.
 export default function VideoToolDock() {
-  const { hasVideo, activePanelSection: activeSection, setActivePanelSection: setActiveSection } = useVideoEditor();
+  const {
+    hasVideo,
+    activePanelSection: activeSection,
+    setActivePanelSection: setActiveSection,
+    mobilePanelOpen: mobileOpen,
+    setMobilePanelOpen: setMobileOpen,
+  } = useVideoEditor();
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const drawerScrollRef = useRef<HTMLDivElement>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     drawerScrollRef.current?.scrollTo({ top: 0 });
@@ -241,7 +246,11 @@ export default function VideoToolDock() {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 420, damping: 38 }}
-            className="fixed inset-x-0 bottom-0 z-30 flex max-h-[42vh] flex-col rounded-t-2xl border-t border-neutral-800 bg-neutral-900/98 shadow-2xl shadow-black/60 backdrop-blur-md md:hidden"
+            // Explicit inline height (not a `h-[42vh]` class) so the sheet's height can never be
+            // clobbered or left unset — it must stay identical across every tab, never grow or
+            // shrink to fit whichever panel's content happens to be tallest/shortest.
+            style={{ height: "42vh" }}
+            className="fixed inset-x-0 bottom-0 z-30 flex flex-col rounded-t-2xl border-t border-neutral-800 bg-neutral-900/98 shadow-2xl shadow-black/60 backdrop-blur-md md:hidden"
           >
             <div className="mx-auto mt-2.5 h-1 w-9 shrink-0 rounded-full bg-neutral-700" />
 
@@ -282,7 +291,7 @@ export default function VideoToolDock() {
               </button>
             </div>
 
-            {/* No ad slot on the mobile sheet — its `max-h-[42vh]` is too short to fit a square
+            {/* No ad slot on the mobile sheet — its fixed 42vh height is too short to fit a square
                 ad block alongside real panel content without squeezing the panel to nothing
                 (matches ImagesPanel's own `md:flex`-gated ad slot, which is desktop-only too). */}
             <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">

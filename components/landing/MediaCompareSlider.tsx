@@ -124,11 +124,11 @@ export default function MediaCompareSlider({
     [stopSweep],
   );
 
-  // Brand gradient (matches the logo mark and hero headline) — same on every slider, everywhere.
+  // Neutral chrome — same on every slider, everywhere, matching the editor's monochrome theme.
   const accentClasses = {
-    badge: "border-[#0066FF]/50 bg-slate-950/80 text-[#5ec8ff] shadow-[0_0_16px_rgba(0,102,255,0.35)]",
-    handle: "bg-gradient-to-br from-[#0066FF] to-[#06B6D4] shadow-[0_0_24px_rgba(0,102,255,0.6)]",
-    glow: "shadow-[0_0_50px_rgba(0,102,255,0.12)]",
+    badge: "border-neutral-700 bg-neutral-950/80 text-neutral-200 shadow-lg shadow-black/30",
+    handle: "bg-white shadow-lg shadow-black/40",
+    glow: "shadow-xl shadow-black/40",
   };
 
   // Fade each label out as the handle sweeps close enough to overlap it.
@@ -143,7 +143,7 @@ export default function MediaCompareSlider({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border-2 border-white/10 bg-[#0B1320] ${accentClasses.glow}`}
+      className={`relative overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950 ${accentClasses.glow}`}
     >
       {/* Interactive canvas */}
       <div
@@ -155,7 +155,7 @@ export default function MediaCompareSlider({
         onPointerLeave={stopDragging}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`relative w-full cursor-ew-resize touch-none select-none overflow-hidden bg-[#0F172A] ${aspectClassName}`}
+        className={`relative w-full cursor-ew-resize touch-none select-none overflow-hidden bg-neutral-900 ${aspectClassName}`}
       >
         {checkerboardAfter && (
           <div
@@ -211,13 +211,13 @@ export default function MediaCompareSlider({
         </div>
 
         <span
-          className="pointer-events-none absolute left-3 top-3 rounded-full border-2 border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-opacity duration-150"
+          className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-200 backdrop-blur-md shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-opacity duration-150"
           style={{ opacity: beforeLabelOpacity }}
         >
           Before
         </span>
         <span
-          className={`pointer-events-none absolute right-3 top-3 rounded-full border-2 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-md transition-opacity duration-150 ${accentClasses.badge}`}
+          className={`pointer-events-none absolute right-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-md transition-opacity duration-150 ${accentClasses.badge}`}
           style={{ opacity: afterLabelOpacity }}
         >
           After
@@ -237,7 +237,7 @@ export default function MediaCompareSlider({
           tabIndex={0}
           onKeyDown={handleKeyDown}
           onPointerDown={handlePointerDown}
-          className={`absolute top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border-2 border-white/20 text-white outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${accentClasses.handle}`}
+          className={`absolute top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-white/20 text-black outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${accentClasses.handle}`}
           style={{ left: `${percent}%` }}
         >
           <ChevronsLeftRight size={26} strokeWidth={2.5} />

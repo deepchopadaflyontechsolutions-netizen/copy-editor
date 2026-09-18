@@ -329,6 +329,13 @@ interface VideoEditorContextValue {
   textOverlays: TextOverlay[];
   activePanelSection: VideoPanelSectionId | null;
   setActivePanelSection: (id: VideoPanelSectionId | null) => void;
+  /** Whether the mobile bottom tools sheet (VideoToolDock's `md:hidden` sheet) is actually open
+   * and covering the bottom of the screen — distinct from `activePanelSection` being set, since
+   * a tab stays "selected" after the sheet is dismissed (so reopening it returns to the same
+   * tab). VideoWorkspace reads this to reserve space above the sheet so the crop box and other
+   * preview controls never end up hidden underneath it. */
+  mobilePanelOpen: boolean;
+  setMobilePanelOpen: (open: boolean) => void;
 
   // Canvas/frame
   canvasAspectRatio: CanvasAspectRatio;
@@ -457,6 +464,7 @@ export function VideoEditorProvider({
   // Upload is the only tab that works before a clip exists, so it starts pre-selected —
   // the other tabs stay disabled (enforced by the tool dock) until `hasVideo` flips true.
   const [activePanelSection, setActivePanelSection] = useState<VideoPanelSectionId | null>("upload");
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   const [audioFadeIn, setAudioFadeIn] = useState(false);
   const [audioFadeOut, setAudioFadeOut] = useState(false);
@@ -1923,6 +1931,8 @@ export function VideoEditorProvider({
       textOverlays,
       activePanelSection,
       setActivePanelSection,
+      mobilePanelOpen,
+      setMobilePanelOpen,
 
       canvasAspectRatio,
       setCanvasAspectRatio,
@@ -1998,6 +2008,7 @@ export function VideoEditorProvider({
       muted,
       textOverlays,
       activePanelSection,
+      mobilePanelOpen,
       canvasAspectRatio,
       exportQuality,
       clipRanges,

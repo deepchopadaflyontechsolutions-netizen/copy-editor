@@ -64,7 +64,7 @@ export default function FAQSection() {
           <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Frequently asked questions
           </h2>
-          <p className="mt-3 text-slate-400">Everything you need to know before you start editing.</p>
+          <p className="mt-3 text-neutral-400">Everything you need to know before you start editing.</p>
         </div>
 
         <div className="space-y-3">
@@ -75,10 +75,10 @@ export default function FAQSection() {
             return (
               <div
                 key={question}
-                className={`overflow-hidden rounded-2xl border-2 backdrop-blur-md transition-all duration-300 ${
+                className={`overflow-hidden rounded-2xl border backdrop-blur-md transition-all duration-300 ${
                   isOpen
-                    ? "border-cyan-500/50 bg-slate-900/60 shadow-[0_0_24px_-8px_rgba(6,182,212,0.35)]"
-                    : "border-slate-800/80 bg-slate-950/40 hover:border-cyan-500/30 hover:bg-slate-900/40"
+                    ? "border-neutral-600 bg-neutral-900/60 shadow-lg shadow-black/30"
+                    : "border-neutral-800 bg-neutral-950/40 hover:border-neutral-700 hover:bg-neutral-900/40"
                 }`}
               >
                 <button
@@ -87,7 +87,7 @@ export default function FAQSection() {
                   aria-expanded={isOpen}
                   aria-controls={panelId}
                   onClick={() => setOpenIndex(isOpen ? null : index)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors duration-200 active:bg-slate-900/60"
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors duration-200 active:bg-neutral-900/60"
                 >
                   <span className="text-sm font-semibold text-white sm:text-base">{question}</span>
                   <motion.span
@@ -95,7 +95,7 @@ export default function FAQSection() {
                     transition={{ duration: 0.2 }}
                     className="shrink-0"
                   >
-                    <ChevronDown size={18} className={isOpen ? "text-cyan-400" : "text-slate-400"} />
+                    <ChevronDown size={18} className={isOpen ? "text-white" : "text-neutral-400"} />
                   </motion.span>
                 </button>
                 <AnimatePresence initial={false}>
@@ -110,7 +110,7 @@ export default function FAQSection() {
                       transition={{ duration: 0.3, ease: "easeInOut" }}
                       className="overflow-hidden"
                     >
-                      <p className="border-t border-slate-800/60 px-5 pb-4 pt-4 text-sm leading-relaxed text-slate-400">
+                      <p className="border-t border-neutral-800 px-5 pb-4 pt-4 text-sm leading-relaxed text-neutral-400">
                         {answer}
                       </p>
                     </motion.div>

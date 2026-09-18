@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Box } from "@mui/material";
-import { CreativeFlowProvider } from "@/context/CreativeFlowContext";
+import { CreativeFlowProvider, type RightPanelSectionId } from "@/context/CreativeFlowContext";
 import { CanvasEngineProvider } from "@/context/CanvasEngineContext";
 import { loadAsset } from "@/lib/landing/assetStore";
 import type { EditIntentId } from "@/types/editIntent";
@@ -15,9 +15,16 @@ interface CreativeFlowAppProps {
   initialTool?: EditIntentId | null;
   /** The IndexedDB key for the asset the landing page handed off, read from ?assetId= on /editor. */
   initialAssetId?: string | null;
+  /** Which sidebar panel to open right away, read from ?panel= on /editor — e.g. the landing
+   * page's "Adjust" quick action deep-links to "adjust" instead of always landing on Upload. */
+  initialPanel?: RightPanelSectionId | null;
 }
 
-export default function CreativeFlowApp({ initialTool = null, initialAssetId = null }: CreativeFlowAppProps) {
+export default function CreativeFlowApp({
+  initialTool = null,
+  initialAssetId = null,
+  initialPanel = null,
+}: CreativeFlowAppProps) {
   const [initialImageFile, setInitialImageFile] = useState<File | null>(null);
 
   useEffect(() => {
@@ -52,7 +59,7 @@ export default function CreativeFlowApp({ initialTool = null, initialAssetId = n
   }, []);
 
   return (
-    <CreativeFlowProvider initialTool={initialTool}>
+    <CreativeFlowProvider initialTool={initialTool} initialPanel={initialPanel}>
       <CanvasEngineProvider initialImageFile={initialImageFile} initialTool={initialTool}>
         {/* One tree for every screen size — RightPanel decides for itself (via CSS breakpoints,
             not JS) whether to render as the permanent desktop dock or the mobile floating-button

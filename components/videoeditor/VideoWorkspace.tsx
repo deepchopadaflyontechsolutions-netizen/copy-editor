@@ -163,6 +163,7 @@ export default function VideoWorkspace() {
     canvasAspectRatio,
     activePanelSection,
     setActivePanelSection,
+    mobilePanelOpen,
   } = useVideoEditor();
 
   const { main: mainTransitionStyle, overlay: overlayTransitionStyle } = getTransitionPreviewStyles(transitionPreview);
@@ -239,8 +240,13 @@ export default function VideoWorkspace() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="relative flex w-full flex-1 flex-col overflow-hidden"
+      className={`relative flex w-full flex-1 flex-col overflow-hidden ${mobilePanelOpen ? "pb-[42vh] md:pb-0" : ""}`}
     >
+      {/* The `pb-[42vh]` above reserves space for the mobile bottom sheet (VideoToolDock's
+          `md:hidden` sheet, fixed at 42vh tall) across the *whole* column — video preview and
+          Timeline together — so normal flex distribution shrinks both proportionally instead of
+          the preview alone getting doubly squeezed by both the Timeline's own height and the
+          sheet reservation. Desktop's side drawer doesn't cover the workspace, hence `md:pb-0`. */}
       <div className="relative flex flex-1 items-center justify-center overflow-hidden p-3 pt-6 sm:p-6 sm:pt-10">
         <div
           ref={frameBoxRef}
@@ -402,7 +408,13 @@ export default function VideoWorkspace() {
         </div>
       </div>
 
-      <Timeline />
+      {/* Hidden while the mobile bottom sheet is open — the sheet already covers this much of
+          the screen, so keeping the timeline mounted underneath it just wastes the little space
+          left for the video itself. Desktop's side drawer never sets `mobilePanelOpen`, so the
+          timeline always stays visible there. */}
+      <div className={mobilePanelOpen ? "hidden md:block" : undefined}>
+        <Timeline />
+      </div>
     </div>
   );
 }

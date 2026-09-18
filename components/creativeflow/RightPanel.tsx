@@ -31,10 +31,15 @@ const FOCUS_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visibl
 // close button spring-closes it again. Arrow keys rove focus across tiles
 // like a native toolbar.
 export default function RightPanel() {
-  const { hasImage } = useCanvasEngine();
-  // Upload is the only tab that works before an image exists, so it starts
-  // pre-selected — the other tabs are disabled (see `disabled` below) until
-  // `hasImage` flips true.
+  const { hasImage, cropMode, enterCropMode, cancelCropMode } = useCanvasEngine();
+  // Every tab is always switchable — each panel already disables its own
+  // controls when there's no image yet (see e.g. AdjustPanel's `disabled =
+  // !activeLayerId`), so gating the *tab itself* on `hasImage` here was
+  // redundant and actively broken deep-linking: landing straight on a
+  // non-Upload tab (e.g. the landing page's "Adjust"/"Mark" quick actions)
+  // made every tab, including the one just opened, briefly disabled and
+  // unclickable until the handed-off asset finished loading async — which
+  // read as "the sidebar won't navigate to any other section".
   const { activeRightPanelSection: activeSection, setActiveRightPanelSection: setActiveSection } = useCreativeFlow();
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const drawerScrollRef = useRef<HTMLDivElement>(null);
@@ -53,6 +58,34 @@ export default function RightPanel() {
     drawerScrollRef.current?.scrollTo({ top: 0 });
   }, [activeSection]);
 
+  // The Crop tab and the live crop overlay are meant to be the same thing — arriving on
+  // "resize" from anywhere else (clicking the tab, or a deep link that lands here without also
+  // carrying a `tool=crop` intent) should already show the interactive frame/handles, not a
+  // plain "Crop" button the user has to press first. `enterCropMode()` with no preset starts the
+  // same freeform session the canvas toolbar's own Crop icon does. Conversely, leaving "resize"
+  // for any other tab drops the in-progress selection instead of leaving its frame/handles
+  // floating on top of whatever tab is now open — `cancelCropMode` discards it without applying,
+  // matching what the Resize panel's own "Cancel" button already does.
+  //
+  // `autoEnteredCropRef` guards this to firing once per *visit* to the tab, not once per
+  // render where `cropMode` happens to be false while already there — without it, applying (or
+  // cancelling) the crop via Enter/Escape/the panel's own buttons/clicking outside the image all
+  // flip `cropMode` back to false while `activeSection` is still "resize", which this effect
+  // would otherwise read as "just arrived, start a fresh crop" and silently re-enter crop mode
+  // right back, making Apply/Escape/click-outside look like they'd done nothing at all.
+  const autoEnteredCropRef = useRef(false);
+  useEffect(() => {
+    if (activeSection !== "resize") {
+      autoEnteredCropRef.current = false;
+      if (cropMode) cancelCropMode();
+      return;
+    }
+    if (hasImage && !cropMode && !autoEnteredCropRef.current) {
+      autoEnteredCropRef.current = true;
+      enterCropMode();
+    }
+  }, [activeSection, hasImage, cropMode, enterCropMode, cancelCropMode]);
+
   // Panels close themselves by calling setActiveRightPanelSection(null) (e.g. AdjustPanel's
   // Apply button) — on desktop that's enough to collapse the drawer. On mobile the sheet has its
   // own open/closed flag (so it doesn't auto-open just because activeSection defaults to
@@ -62,7 +95,6 @@ export default function RightPanel() {
 
   const closeSection = () => setActiveSection(null);
   const switchSection = (id: SectionId) => {
-    if (!hasImage && id !== "images") return;
     setActiveSection(activeSection === id ? null : id);
   };
 
@@ -74,7 +106,6 @@ export default function RightPanel() {
     setMobileOpen(true);
   };
   const switchMobileSection = (id: SectionId) => {
-    if (!hasImage && id !== "images") return;
     setActiveSection(id);
   };
 
@@ -119,7 +150,6 @@ export default function RightPanel() {
       >
         {NAV_ITEMS.map(({ id, label, icon: Icon }, index) => {
           const isActive = activeSection === id;
-          const isDisabled = !hasImage && id !== "images";
           return (
             <motion.button
               key={id}
@@ -127,19 +157,14 @@ export default function RightPanel() {
                 buttonRefs.current[index] = el;
               }}
               type="button"
-              whileTap={isDisabled ? undefined : { scale: 0.93 }}
+              whileTap={{ scale: 0.93 }}
               onClick={() => switchSection(id)}
               onKeyDown={(event) => handleTileKeyDown(event, index)}
-              disabled={isDisabled}
               aria-pressed={isActive}
               aria-label={label}
               aria-controls={isActive ? DRAWER_ID : undefined}
               className={`group relative flex h-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg text-xs font-medium tracking-tight transition-colors ${FOCUS_RING} ${
-                isDisabled
-                  ? "cursor-not-allowed text-neutral-700"
-                  : isActive
-                    ? "text-white"
-                    : "text-neutral-400 hover:text-neutral-100"
+                isActive ? "text-white" : "text-neutral-400 hover:text-neutral-100"
               }`}
             >
               {isActive && (
@@ -156,16 +181,12 @@ export default function RightPanel() {
                   />
                 </>
               )}
-              {!isActive && !isDisabled && (
+              {!isActive && (
                 <span className="absolute inset-0.5 rounded-lg bg-transparent transition-colors group-hover:bg-neutral-800/60" />
               )}
               <span
                 className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-                  isDisabled
-                    ? "text-neutral-700"
-                    : isActive
-                      ? "text-white"
-                      : "text-neutral-400 group-hover:text-neutral-100"
+                  isActive ? "text-white" : "text-neutral-400 group-hover:text-neutral-100"
                 }`}
               >
                 <Icon size={20} />
@@ -284,21 +305,15 @@ export default function RightPanel() {
             <div className="flex flex-1 items-center gap-1 overflow-x-auto">
               {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
                 const isActive = activeSection === id;
-                const isDisabled = !hasImage && id !== "images";
                 return (
                   <button
                     key={id}
                     type="button"
                     onClick={() => switchMobileSection(id)}
-                    disabled={isDisabled}
                     aria-pressed={isActive}
                     aria-label={label}
                     className={`flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${FOCUS_RING} ${
-                      isDisabled
-                        ? "cursor-not-allowed text-neutral-700"
-                        : isActive
-                          ? "bg-white/10 text-white"
-                          : "text-neutral-400"
+                      isActive ? "bg-white/10 text-white" : "text-neutral-400"
                     }`}
                   >
                     <Icon size={18} />

@@ -9,9 +9,15 @@ import {
 } from "react";
 import type { NavKey, ToolKey, TopToolKey } from "@/types/creativeflow";
 import type { EditIntentId } from "@/types/editIntent";
+// The actual type/guard live in a plain (non-"use client") module so the server-rendered
+// /editor page can also validate `?panel=` with `isCreativeFlowPanelSectionId` without
+// importing a client-boundary symbol into server code — re-exported below so existing
+// `import { type RightPanelSectionId } from "@/context/CreativeFlowContext"` call sites (e.g.
+// the floating `ContextToolbar` jumping its Crop icon to the sidebar's Crop panel) still work.
+import { type CreativeFlowPanelSectionId, isCreativeFlowPanelSectionId } from "@/lib/creativeflowPanelSections";
 
-/** Which drawer tile is open in `RightPanel` — shared so the floating `ContextToolbar` can open a specific section (e.g. its Crop icon jumping to the sidebar's Crop panel). */
-export type RightPanelSectionId = "images" | "adjust" | "resize" | "watermark";
+export type RightPanelSectionId = CreativeFlowPanelSectionId;
+export { isCreativeFlowPanelSectionId };
 
 interface CreativeFlowContextValue {
   activeNav: NavKey;
@@ -67,9 +73,13 @@ interface CreativeFlowProviderProps {
   children: ReactNode;
   /** The edit-mode intent chosen on the landing page, if the user arrived from there. */
   initialTool?: EditIntentId | null;
+  /** Which sidebar panel to open right away, read from ?panel= on /editor — e.g. the landing
+   * page's "Adjust" or "Mark" quick action deep-links straight to that tab instead of always
+   * landing on the default "Upload" tab. */
+  initialPanel?: RightPanelSectionId | null;
 }
 
-export function CreativeFlowProvider({ children, initialTool = null }: CreativeFlowProviderProps) {
+export function CreativeFlowProvider({ children, initialTool = null, initialPanel = null }: CreativeFlowProviderProps) {
   const initialTopBarState = useMemo(() => resolveInitialTopBarState(initialTool), [initialTool]);
 
   const [activeNav, setActiveNav] = useState<NavKey>("home");
@@ -84,7 +94,9 @@ export function CreativeFlowProvider({ children, initialTool = null }: CreativeF
   const [fileFormat, setFileFormat] = useState("PNG");
   const [exportQuality, setExportQuality] = useState("High");
 
-  const [activeRightPanelSection, setActiveRightPanelSection] = useState<RightPanelSectionId | null>("images");
+  const [activeRightPanelSection, setActiveRightPanelSection] = useState<RightPanelSectionId | null>(
+    initialPanel ?? "images",
+  );
 
   const value = useMemo<CreativeFlowContextValue>(
     () => ({

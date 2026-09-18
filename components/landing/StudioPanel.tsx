@@ -15,15 +15,14 @@ import {
   Clapperboard,
   CloudUpload,
   Crop,
-  Eraser,
   Film,
   Images,
-  Layers,
   Loader2,
   Music,
-  Palette,
   Plus,
   Scissors,
+  SlidersHorizontal,
+  Stamp,
   X,
 } from "lucide-react";
 import {
@@ -35,7 +34,10 @@ import { saveAsset } from "@/lib/landing/assetStore";
 import { generateUUID } from "@/lib/landing/uuid";
 import Toast from "./Toast";
 
-const MAX_ITEMS = 5;
+// Image mode only ever hands one file off to a quick action (see handleQuickAction, which
+// only ever reads `activeItem`), so there's no real use for picking among several images —
+// video keeps its own multi-clip cap since the video editor itself is a multi-clip timeline.
+const MAX_ITEMS_BY_KIND: Record<MediaKind, number> = { image: 1, video: 5 };
 
 const MODE_TABS: { key: MediaKind; label: string; Icon: typeof Images }[] = [
   { key: "image", label: "Image Mode", Icon: Images },
@@ -44,20 +46,20 @@ const MODE_TABS: { key: MediaKind; label: string; Icon: typeof Images }[] = [
 
 const TOOL_ACCENTS = {
   blue: {
-    icon: "bg-blue-500/15 text-blue-400 group-hover:bg-blue-500 group-hover:text-white",
-    hover: "hover:border-blue-500/50 hover:bg-blue-500/[0.06] hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]",
+    icon: "bg-white/10 text-neutral-200 group-hover:bg-white group-hover:text-black",
+    hover: "hover:border-neutral-600 hover:bg-white/[0.04]",
   },
   purple: {
-    icon: "bg-purple-500/15 text-purple-400 group-hover:bg-purple-500 group-hover:text-white",
-    hover: "hover:border-purple-500/50 hover:bg-purple-500/[0.06] hover:shadow-[0_0_15px_rgba(168,85,247,0.2)]",
+    icon: "bg-white/10 text-neutral-200 group-hover:bg-white group-hover:text-black",
+    hover: "hover:border-neutral-600 hover:bg-white/[0.04]",
   },
   emerald: {
-    icon: "bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white",
-    hover: "hover:border-emerald-500/50 hover:bg-emerald-500/[0.06] hover:shadow-[0_0_15px_rgba(16,185,129,0.2)]",
+    icon: "bg-white/10 text-neutral-200 group-hover:bg-white group-hover:text-black",
+    hover: "hover:border-neutral-600 hover:bg-white/[0.04]",
   },
   amber: {
-    icon: "bg-amber-500/15 text-amber-400 group-hover:bg-amber-500 group-hover:text-white",
-    hover: "hover:border-amber-500/50 hover:bg-amber-500/[0.06] hover:shadow-[0_0_15px_rgba(245,158,11,0.2)]",
+    icon: "bg-white/10 text-neutral-200 group-hover:bg-white group-hover:text-black",
+    hover: "hover:border-neutral-600 hover:bg-white/[0.04]",
   },
 } as const;
 
@@ -72,35 +74,31 @@ interface QuickAction {
   soon?: boolean;
 }
 
+// Mirrors the real editor's own dock (RightPanel.tsx: Upload/Adjust/Crop/Mark) instead of a
+// separate set of AI-styled marketing names — "Upload" is skipped since the user's already
+// past that step by the time this list shows. Each one routes into the same unified editor
+// the dock tab does, not a standalone page for a feature that isn't actually there.
 const IMAGE_QUICK_ACTIONS: QuickAction[] = [
   {
     label: "Crop & Resize",
-    description: "Adjust dimensions and aspect ratio",
+    description: "Aspect ratio, dimensions & rotate",
     Icon: Crop,
-    href: "/crop-resize",
+    href: "/editor?tool=crop&panel=resize",
     accent: "blue",
   },
   {
-    label: "Remove Background",
-    description: "Precision subject cutout",
-    Icon: Layers,
-    href: "/background-remover",
+    label: "Adjust",
+    description: "Presets, color & light controls",
+    Icon: SlidersHorizontal,
+    href: "/editor?panel=adjust",
     accent: "purple",
   },
   {
-    label: "Watermark Remover",
-    description: "Clean up unwanted overlays",
-    Icon: Eraser,
-    href: "/watermark-remover",
+    label: "Mark",
+    description: "Add a text or logo watermark",
+    Icon: Stamp,
+    href: "/editor?panel=watermark",
     accent: "emerald",
-  },
-  {
-    label: "Color Grade",
-    description: "Fine-tune tone, contrast & hue",
-    Icon: Palette,
-    href: "/color-grade",
-    accent: "amber",
-    soon: true,
   },
 ];
 
@@ -130,38 +128,38 @@ const VIDEO_QUICK_ACTIONS: QuickAction[] = [
 
 const MODE_ACCENT = {
   image: {
-    borderBg: "bg-blue-500/40",
-    idleGlow: "shadow-[0_0_22px_rgba(59,130,246,0.22)]",
-    bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(37,99,235,0.22),transparent_60%)]",
-    iconBox: "bg-gradient-to-br from-blue-500 to-blue-600 border-2 border-blue-400/40",
-    iconGlow: "shadow-[0_0_16px_rgba(59,130,246,0.4)]",
-    text: "text-blue-400 underline decoration-blue-400/70 underline-offset-4 transition-colors duration-200 hover:text-blue-300",
-    pillActive: "scale-105 bg-blue-600 text-white shadow-[0_0_20px_rgba(59,130,246,0.5)]",
-    tooltipBorder: "border-blue-500/40",
-    tooltipGlow: "shadow-[0_12px_32px_-8px_rgba(59,130,246,0.5)]",
-    tooltipIconBox: "bg-blue-500/15 text-blue-400",
+    borderBg: "bg-neutral-700",
+    idleGlow: "shadow-lg shadow-black/30",
+    bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.05),transparent_60%)]",
+    iconBox: "bg-neutral-800 border border-neutral-700",
+    iconGlow: "shadow-lg shadow-black/30",
+    text: "text-white underline decoration-white/50 underline-offset-4 transition-colors duration-200 hover:text-neutral-300",
+    pillActive: "scale-105 bg-white text-black shadow-md shadow-black/20",
+    tooltipBorder: "border-neutral-700",
+    tooltipGlow: "shadow-2xl shadow-black/40",
+    tooltipIconBox: "bg-white/10 text-white",
   },
   video: {
-    borderBg: "bg-purple-500/40",
-    idleGlow: "shadow-[0_0_22px_rgba(168,85,247,0.22)]",
-    bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(168,85,247,0.22),transparent_60%)]",
-    iconBox: "bg-gradient-to-br from-purple-500 to-purple-600 border-2 border-purple-400/40",
-    iconGlow: "shadow-[0_0_16px_rgba(168,85,247,0.4)]",
-    text: "text-purple-400 underline decoration-purple-400/70 underline-offset-4 transition-colors duration-200 hover:text-purple-300",
-    pillActive: "scale-105 bg-purple-600 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)]",
-    tooltipBorder: "border-purple-500/40",
-    tooltipGlow: "shadow-[0_12px_32px_-8px_rgba(168,85,247,0.5)]",
-    tooltipIconBox: "bg-purple-500/15 text-purple-400",
+    borderBg: "bg-neutral-700",
+    idleGlow: "shadow-lg shadow-black/30",
+    bgGlow: "bg-[radial-gradient(circle_at_50%_38%,rgba(255,255,255,0.05),transparent_60%)]",
+    iconBox: "bg-neutral-800 border border-neutral-700",
+    iconGlow: "shadow-lg shadow-black/30",
+    text: "text-white underline decoration-white/50 underline-offset-4 transition-colors duration-200 hover:text-neutral-300",
+    pillActive: "scale-105 bg-white text-black shadow-md shadow-black/20",
+    tooltipBorder: "border-neutral-700",
+    tooltipGlow: "shadow-2xl shadow-black/40",
+    tooltipIconBox: "bg-white/10 text-white",
   },
 } as const satisfies Record<MediaKind, Record<string, string>>;
 
-/** Neon blue-to-pink gradient stroke shown on the empty dropzone's hover/drag-over state.
+/** Subtle white stroke shown on the empty dropzone's hover/drag-over state.
  *  Applied as a background (not border-image) so the rounded corners are preserved. */
-const HOVER_GRADIENT_BORDER_BG = "bg-gradient-to-r from-blue-500 via-indigo-500 to-pink-500";
-const HOVER_GLOW = "shadow-[0_0_40px_rgba(59,130,246,0.35),0_0_55px_rgba(236,72,153,0.28)]";
+const HOVER_GRADIENT_BORDER_BG = "bg-neutral-500";
+const HOVER_GLOW = "shadow-xl shadow-black/40";
 
 const SUBTEXT_BY_KIND: Record<MediaKind, string> = {
-  image: "Supports JPG, PNG, WebP, GIF — Max 25MB — up to 5 files",
+  image: "Supports JPG, PNG, WebP, GIF — Max 25MB",
   video: "Supports MP4, MOV, WebM, AVI — Max 500MB",
 };
 
@@ -211,6 +209,10 @@ export default function StudioPanel({
     video: null,
   });
   const [isBusy, setIsBusy] = useState(false);
+  // Which quick action is actually preparing its handoff, so only *that* card swaps to a
+  // spinner — `isBusy` alone doubled as "which one is loading" before, which made every quick
+  // action card spin at once no matter which single one was clicked.
+  const [loadingHref, setLoadingHref] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const mediaList = mediaByMode[mode];
@@ -238,9 +240,33 @@ export default function StudioPanel({
   const handleFiles = useCallback(
     (files: File[]) => {
       if (!files.length || isBusy) return;
-      const room = MAX_ITEMS - mediaList.length;
+      const maxItems = MAX_ITEMS_BY_KIND[mode];
+
+      // Single-item modes (image) replace whatever's already loaded instead of rejecting the
+      // drop — there's no tray to add alongside, so "drop a new one" reads as "swap it in".
+      if (maxItems === 1) {
+        const result = validateMediaFile(files[0], mode);
+        if (!result.ok) {
+          showError(result.message);
+          return;
+        }
+        mediaList.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+        const accepted: MediaItem = {
+          id: generateUUID(),
+          file: files[0],
+          kind: mode,
+          previewUrl: URL.createObjectURL(files[0]),
+          width: null,
+          height: null,
+        };
+        setMediaByMode((prev) => ({ ...prev, [mode]: [accepted] }));
+        setActiveIdByMode((prev) => ({ ...prev, [mode]: accepted.id }));
+        return;
+      }
+
+      const room = maxItems - mediaList.length;
       if (room <= 0) {
-        showError(`You can add up to ${MAX_ITEMS} files.`);
+        showError(`You can add up to ${maxItems} files.`);
         return;
       }
 
@@ -264,13 +290,13 @@ export default function StudioPanel({
       if (!accepted.length) return;
       if (files.length > room) {
         showError(
-          `Only added ${accepted.length} file${accepted.length === 1 ? "" : "s"} — the ${MAX_ITEMS}-file limit was reached.`,
+          `Only added ${accepted.length} file${accepted.length === 1 ? "" : "s"} — the ${maxItems}-file limit was reached.`,
         );
       }
       setMediaByMode((prev) => ({ ...prev, [mode]: [...prev[mode], ...accepted] }));
       setActiveIdByMode((prev) => ({ ...prev, [mode]: prev[mode] ?? accepted[0].id }));
     },
-    [isBusy, mode, mediaList.length, showError],
+    [isBusy, mode, mediaList, showError],
   );
 
   const handleModeChange = useCallback(
@@ -376,6 +402,7 @@ export default function StudioPanel({
     async (href: string, soon?: boolean) => {
       if (!activeItem || soon || isBusy) return;
       setIsBusy(true);
+      setLoadingHref(href);
       try {
         const assetId = generateUUID();
         await saveAsset(assetId, activeItem.file);
@@ -386,6 +413,7 @@ export default function StudioPanel({
         router.push(`${href}${separator}assetId=${assetId}`);
       } catch {
         setIsBusy(false);
+        setLoadingHref(null);
         showError("Couldn't prepare that file. Please try again.");
       }
     },
@@ -393,10 +421,10 @@ export default function StudioPanel({
   );
 
   const cardClass = (disabled: boolean, toolAccent: ToolAccent) =>
-    `group flex w-full items-center gap-3 rounded-xl border-2 px-3.5 py-3 text-left transition-all duration-200 ${
+    `group flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all duration-200 ${
       disabled
-        ? "cursor-not-allowed border-slate-800 bg-slate-900/40 opacity-50"
-        : `cursor-pointer border-slate-700/70 bg-slate-800/40 hover:scale-[1.02] ${TOOL_ACCENTS[toolAccent].hover}`
+        ? "cursor-not-allowed border-neutral-800 bg-neutral-900/40 opacity-50"
+        : `cursor-pointer border-neutral-700 bg-neutral-800/40 hover:scale-[1.02] ${TOOL_ACCENTS[toolAccent].hover}`
     }`;
 
   const accent = MODE_ACCENT[mode];
@@ -405,12 +433,10 @@ export default function StudioPanel({
 
   return (
     <div className="relative mx-auto w-full max-w-4xl pt-17.75">
-      {/* Ambient pulsing neon glow behind the dropzone card */}
+      {/* Ambient soft glow behind the dropzone card */}
       <div
         aria-hidden
-        className={`animate-neon-glow-pulse pointer-events-none absolute inset-x-6 top-17.75 -z-10 h-[420px] rounded-[32px] ${
-          mode === "image" ? "bg-blue-500/40" : "bg-purple-500/40"
-        }`}
+        className="pointer-events-none absolute inset-x-6 top-17.75 -z-10 h-[420px] rounded-[32px] bg-white/[0.03] blur-2xl"
       />
 
       <div
@@ -429,7 +455,7 @@ export default function StudioPanel({
           id={inputId}
           type="file"
           accept={ACCEPT_BY_KIND[mode]}
-          multiple
+          multiple={MAX_ITEMS_BY_KIND[mode] > 1}
           hidden
           disabled={isBusy}
           onChange={handleInputChange}
@@ -437,7 +463,7 @@ export default function StudioPanel({
 
         <div
           className={`relative h-full w-full overflow-hidden rounded-[calc(1.5rem-2px)] backdrop-blur-md ${
-            hasMedia ? "bg-slate-950/70" : "bg-slate-950"
+            hasMedia ? "bg-neutral-950/70" : "bg-neutral-950"
           }`}
         >
           {mediaList.length === 0 ? (
@@ -502,7 +528,7 @@ export default function StudioPanel({
                 </div>
 
                 <div className="relative">
-                  <p className="text-xl font-semibold text-slate-100 sm:text-2xl">
+                  <p className="text-xl font-semibold text-neutral-100 sm:text-2xl">
                     {isBusy ? (
                       "Loading…"
                     ) : mode === "image" ? (
@@ -518,7 +544,7 @@ export default function StudioPanel({
                     )}
                   </p>
 
-                  <p id={`${inputId}-hint`} className="mt-2 text-sm text-slate-400">
+                  <p id={`${inputId}-hint`} className="mt-2 text-sm text-neutral-400">
                     {SUBTEXT_BY_KIND[mode]}
                   </p>
                 </div>
@@ -527,7 +553,7 @@ export default function StudioPanel({
                   {FORMAT_CHIPS_BY_KIND[mode].map((chip) => (
                     <span
                       key={chip}
-                      className="rounded-full border-2 border-slate-700/50 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-300 transition-transform duration-200 hover:-translate-y-1 hover:border-blue-400 hover:shadow-sm"
+                      className="rounded-full border border-neutral-700 bg-neutral-800/60 px-3 py-1 text-xs font-medium text-neutral-300 transition-transform duration-200 hover:-translate-y-1 hover:border-neutral-500 hover:shadow-sm"
                     >
                       {chip}
                     </span>
@@ -536,11 +562,11 @@ export default function StudioPanel({
               </div>
             </div>
           ) : (
-            <div className="grid h-full w-full grid-cols-1 divide-y divide-slate-800/80 md:grid-cols-12 md:divide-x md:divide-y-0">
+            <div className="grid h-full w-full grid-cols-1 divide-y divide-neutral-800 md:grid-cols-12 md:divide-x md:divide-y-0">
             {/* Left pane — canvas + carousel */}
             <div className="relative flex h-full w-full min-h-0 flex-col justify-between overflow-hidden bg-black/40 p-4 md:col-span-7">
               {activeItem && (
-                <div className="absolute left-3 top-3 z-10 rounded-md border-2 border-slate-700/60 bg-slate-900/80 px-2.5 py-1 text-[10px] text-slate-300 backdrop-blur-md">
+                <div className="absolute left-3 top-3 z-10 rounded-md border border-neutral-700 bg-neutral-900/80 px-2.5 py-1 text-[10px] text-neutral-300 backdrop-blur-md">
                   {activeItem.width && activeItem.height ? `${activeItem.width} × ${activeItem.height} • ` : ""}
                   {formatLabel(activeItem.file)}
                 </div>
@@ -550,7 +576,7 @@ export default function StudioPanel({
                 type="button"
                 aria-label="Clear all"
                 onClick={handleClearAll}
-                className="absolute right-3 top-3 z-10 rounded-lg border-2 border-slate-700/60 bg-slate-900/80 p-1.5 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                className="absolute right-3 top-3 z-10 rounded-lg border border-neutral-700 bg-neutral-900/80 p-1.5 text-neutral-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
               >
                 <X size={14} />
               </button>
@@ -577,78 +603,83 @@ export default function StudioPanel({
                 ) : null}
               </div>
 
-              <div
-                data-accent={mode}
-                className="custom-scrollbar flex w-full items-center gap-2 overflow-x-auto border-t-2 border-slate-800/60 pt-2"
-              >
-                {mediaList.map((item) => (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ duration: 0.3, ease: "easeOut" }}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Show ${item.file.name}`}
-                    aria-pressed={item.id === activeId}
-                    onClick={() => setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }))}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }));
-                      }
-                    }}
-                    className={`relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 outline-none ${
-                      item.id === activeId
-                        ? "border-blue-500 ring-2 ring-blue-500/30"
-                        : "border-slate-700 hover:border-slate-600"
-                    }`}
-                  >
-                    {item.kind === "image" ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.previewUrl}
-                        alt={item.file.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <video src={item.previewUrl} muted className="h-full w-full object-cover" />
-                    )}
+              {/* Thumbnail tray — only meaningful once more than one item can be loaded at a
+                  time (video). Single-item modes (image) have nothing to switch between, so
+                  the strip and its "+" add button are just noise there. */}
+              {MAX_ITEMS_BY_KIND[mode] > 1 && (
+                <div
+                  data-accent={mode}
+                  className="custom-scrollbar flex w-full items-center gap-2 overflow-x-auto border-t border-neutral-800 pt-2"
+                >
+                  {mediaList.map((item) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Show ${item.file.name}`}
+                      aria-pressed={item.id === activeId}
+                      onClick={() => setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setActiveIdByMode((prev) => ({ ...prev, [mode]: item.id }));
+                        }
+                      }}
+                      className={`relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-lg border outline-none ${
+                        item.id === activeId
+                          ? "border-white ring-2 ring-white/30"
+                          : "border-neutral-700 hover:border-neutral-600"
+                      }`}
+                    >
+                      {item.kind === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.previewUrl}
+                          alt={item.file.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <video src={item.previewUrl} muted className="h-full w-full object-cover" />
+                      )}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.file.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRemoveItem(item.id);
+                        }}
+                        className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/70 text-neutral-200 transition-colors hover:bg-red-500/80"
+                      >
+                        <X size={10} />
+                      </button>
+                    </motion.div>
+                  ))}
+
+                  {mediaList.length < MAX_ITEMS_BY_KIND[mode] && (
                     <button
                       type="button"
-                      aria-label={`Remove ${item.file.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleRemoveItem(item.id);
-                      }}
-                      className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-bl bg-black/70 text-slate-200 transition-colors hover:bg-red-500/80"
+                      onClick={openFileDialog}
+                      disabled={isBusy}
+                      aria-label="Add more files"
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-neutral-700 text-neutral-500 transition-colors hover:border-neutral-500 hover:text-neutral-200 disabled:opacity-50"
                     >
-                      <X size={10} />
+                      <Plus size={16} />
                     </button>
-                  </motion.div>
-                ))}
-
-                {mediaList.length < MAX_ITEMS && (
-                  <button
-                    type="button"
-                    onClick={openFileDialog}
-                    disabled={isBusy}
-                    aria-label="Add more files"
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-slate-700 text-slate-500 transition-colors hover:border-blue-500/50 hover:text-blue-400 disabled:opacity-50"
-                  >
-                    <Plus size={16} />
-                  </button>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right pane — edit controls */}
             <div
               data-accent={mode}
-              className="custom-scrollbar flex h-full w-full flex-col overflow-y-auto bg-slate-900/90 p-5 md:col-span-5"
+              className="custom-scrollbar flex h-full w-full flex-col overflow-y-auto bg-neutral-900/90 p-5 md:col-span-5"
             >
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                   Select Feature
                 </p>
                 <div className="flex flex-col gap-2">
@@ -665,10 +696,10 @@ export default function StudioPanel({
                       >
                         <span
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200 ${
-                            disabled ? "bg-slate-800 text-slate-500" : TOOL_ACCENTS[action.accent].icon
+                            disabled ? "bg-neutral-800 text-neutral-500" : TOOL_ACCENTS[action.accent].icon
                           }`}
                         >
-                          {isBusy && !action.soon ? (
+                          {loadingHref === action.href ? (
                             <Loader2 size={17} className="animate-spin" />
                           ) : (
                             <action.Icon size={17} />
@@ -678,12 +709,12 @@ export default function StudioPanel({
                           <span className="block text-sm font-semibold leading-tight text-white">
                             {action.label}
                           </span>
-                          <span className="mt-0.5 block truncate text-xs leading-tight text-slate-400">
+                          <span className="mt-0.5 block truncate text-xs leading-tight text-neutral-400">
                             {action.description}
                           </span>
                         </span>
                         {action.soon && (
-                          <span className="animate-pulse shrink-0 rounded-full bg-slate-700/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
+                          <span className="animate-pulse shrink-0 rounded-full bg-neutral-700/60 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-neutral-400">
                             Soon
                           </span>
                         )}
@@ -700,7 +731,7 @@ export default function StudioPanel({
 
       {/* Floating mode switcher pill — always above the dropzone */}
       <div className="absolute left-1/2 top-1.25 z-20 -translate-x-1/2">
-        <div className="flex items-center gap-2 rounded-full border-2 border-white/10 bg-slate-900/90 p-1.5 shadow-2xl backdrop-blur-xl">
+        <div className="flex items-center gap-2 rounded-full border border-neutral-800 bg-neutral-900/90 p-1.5 shadow-2xl shadow-black/40 backdrop-blur-xl">
           {MODE_TABS.map(({ key, label, Icon }, index) => {
             const active = mode === key;
             return (
@@ -716,7 +747,7 @@ export default function StudioPanel({
                     className={`flex h-10 w-10 items-center justify-center rounded-full transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                       active
                         ? MODE_ACCENT[key].pillActive
-                        : "text-slate-500 hover:scale-105 hover:bg-white/10 hover:text-white"
+                        : "text-neutral-500 hover:scale-105 hover:bg-white/10 hover:text-white"
                     }`}
                   >
                     <Icon size={18} />
@@ -724,14 +755,14 @@ export default function StudioPanel({
 
                   <div
                     aria-hidden
-                    className={`pointer-events-none absolute -top-14 left-1/2 flex -translate-x-1/2 translate-y-1 scale-95 items-center gap-2 whitespace-nowrap rounded-xl border-2 bg-gradient-to-b from-slate-800/95 to-slate-900/95 py-1.5 pl-1.5 pr-3.5 text-xs font-semibold text-slate-100 opacity-0 backdrop-blur-md transition-all duration-200 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 ${MODE_ACCENT[key].tooltipBorder} ${MODE_ACCENT[key].tooltipGlow}`}
+                    className={`pointer-events-none absolute -top-14 left-1/2 flex -translate-x-1/2 translate-y-1 scale-95 items-center gap-2 whitespace-nowrap rounded-xl border bg-neutral-900/95 py-1.5 pl-1.5 pr-3.5 text-xs font-semibold text-neutral-100 opacity-0 backdrop-blur-md transition-all duration-200 group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 ${MODE_ACCENT[key].tooltipBorder} ${MODE_ACCENT[key].tooltipGlow}`}
                   >
                     <span className={`flex h-5 w-5 items-center justify-center rounded-md ${MODE_ACCENT[key].tooltipIconBox}`}>
                       <Icon size={12} />
                     </span>
                     {label}
                     <span
-                      className={`absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b-2 border-r-2 bg-slate-900 ${MODE_ACCENT[key].tooltipBorder}`}
+                      className={`absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r bg-neutral-900 ${MODE_ACCENT[key].tooltipBorder}`}
                     />
                   </div>
                 </div>
