@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Image as ImageIcon, SlidersHorizontal, Ratio, Stamp, X, ChevronLeft, Pencil } from "lucide-react";
 import { useCanvasEngine } from "@/context/CanvasEngineContext";
 import { useCreativeFlow, type RightPanelSectionId } from "@/context/CreativeFlowContext";
+import SidebarAd from "@/components/SidebarAd";
 import ImagesPanel from "./panels/ImagesPanel";
 import AdjustPanel from "./panels/AdjustPanel";
 import ResizePanel from "./panels/ResizePanel";
@@ -220,10 +221,9 @@ export default function RightPanel() {
             </button>
             <div
               id={DRAWER_ID}
-              ref={drawerScrollRef}
               role="region"
               aria-label={`${active?.label} controls`}
-              className="custom-scrollbar h-full w-full overflow-x-hidden overflow-y-auto border-l border-r border-neutral-800/70 bg-neutral-900/95 shadow-2xl shadow-black/40 backdrop-blur-md"
+              className="h-full w-full overflow-hidden border-l border-r border-neutral-800/70 bg-neutral-900/95 shadow-2xl shadow-black/40 backdrop-blur-md"
             >
               <div className="flex h-full min-h-0 flex-col" style={{ width: DRAWER_WIDTH }}>
                 <div className="flex shrink-0 items-center justify-end px-3 pt-3">
@@ -236,24 +236,32 @@ export default function RightPanel() {
                     <X size={18} strokeWidth={2.25} />
                   </button>
                 </div>
-                <AnimatePresence mode="wait" initial={false}>
-                  {/*
-                    Fade only — no `y` offset. A transform on this child shifts
-                    its post-transform box, and since the scroll container is
-                    an ancestor, that shift briefly reads as real overflow and
-                    flashes the scrollbar for the ~150ms of the transition.
-                  */}
-                  <motion.div
-                    key={activeSection}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
-                    className="flex flex-1 min-h-0 flex-col"
-                  >
-                    <ActivePanel />
-                  </motion.div>
-                </AnimatePresence>
+                {/* Only this middle region scrolls — long panels (e.g. Adjust) scroll here while
+                    the 300×250 ad slot below stays pinned to the bottom of the drawer. */}
+                <div ref={drawerScrollRef} className="custom-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {/*
+                      Fade only — no `y` offset. A transform on this child shifts
+                      its post-transform box, and since the scroll container is
+                      an ancestor, that shift briefly reads as real overflow and
+                      flashes the scrollbar for the ~150ms of the transition.
+                    */}
+                    <motion.div
+                      key={activeSection}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className="flex min-h-full flex-col"
+                    >
+                      <ActivePanel />
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+                {/* 320px drawer − 2×10px padding = exactly 300px wide, matching SidebarAd. */}
+                <div className="shrink-0 border-t border-neutral-800/70 px-2.5 py-2.5">
+                  <SidebarAd />
+                </div>
               </div>
             </div>
           </motion.div>
@@ -334,6 +342,9 @@ export default function RightPanel() {
 
           <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {ActivePanel && <ActivePanel />}
+            <div className="border-t border-neutral-800/70 px-4 py-3">
+              <SidebarAd />
+            </div>
           </div>
         </motion.div>
       )}

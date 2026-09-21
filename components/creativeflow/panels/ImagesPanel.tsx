@@ -13,7 +13,6 @@ import { motion } from "framer-motion";
 import {
   Check,
   EyeOff,
-  ImageIcon,
   ImageOff,
   Images,
   Loader2,
@@ -390,30 +389,6 @@ export default function ImagesPanel() {
         )}
       </div>
 
-      <div className="group sticky bottom-0 z-10 mt-auto hidden h-56 w-full shrink-0 flex-col items-center justify-center gap-1.5 overflow-hidden rounded-2xl border border-neutral-800/80 bg-gradient-to-b from-neutral-900/95 to-[#0a0a0a] text-neutral-600 shadow-[0_-8px_16px_-8px_rgba(0,0,0,0.5)] backdrop-blur-sm transition-colors hover:border-neutral-700 md:flex">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, rgba(148,163,184,0.9) 1px, transparent 1px)",
-            backgroundSize: "16px 16px",
-          }}
-        />
-        <span className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-800/70 text-neutral-500 ring-1 ring-inset ring-neutral-700/60 transition-colors group-hover:text-white">
-          <ImageIcon size={16} />
-        </span>
-        <span className="relative flex items-center gap-1.5">
-          <span className="rounded-sm bg-neutral-800/80 px-1 py-px text-[9px] font-bold tracking-wide text-neutral-500 ring-1 ring-inset ring-neutral-700/60">
-            AD
-          </span>
-          <span className="text-[11px] font-semibold tracking-wide text-neutral-400">
-            Advertisement
-          </span>
-        </span>
-        <span className="relative text-[10px] tracking-wide text-neutral-600">
-          300 × 250
-        </span>
-      </div>
     </PanelSection>
   );
 }

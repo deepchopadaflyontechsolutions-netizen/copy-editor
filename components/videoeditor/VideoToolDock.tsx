@@ -10,7 +10,7 @@ import TextPanel from "./panels/TextPanel";
 import AudioPanel from "./panels/AudioPanel";
 import SpeedPanel from "./panels/SpeedPanel";
 import EffectsPanel from "./panels/EffectsPanel";
-import AdSlot from "@/components/creativeflow/panels/AdSlot";
+import SidebarAd from "@/components/SidebarAd";
 
 type SectionId = VideoPanelSectionId;
 
@@ -214,7 +214,7 @@ export default function VideoToolDock() {
                     </AnimatePresence>
                   </div>
                   <div className="shrink-0 border-t border-neutral-800/70 px-4 py-3">
-                    <AdSlot />
+                    <SidebarAd />
                   </div>
                 </div>
               </div>

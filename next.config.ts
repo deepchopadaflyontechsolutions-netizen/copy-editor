@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   // chunks 403'd, so React never hydrates and the page is stuck on the
   // server-rendered (mobile) fallback. Wildcards cover common home/office
   // LAN subnets so this keeps working across DHCP IP changes.
-  allowedDevOrigins: ["192.168.*.*", "10.*.*.*"],
+  allowedDevOrigins: ["192.168.*.*", "10.*.*.*", '*.ngrok-free.app', '*.ngrok-free.dev', '*.ngrok.io'],
 };
 
 export default nextConfig;

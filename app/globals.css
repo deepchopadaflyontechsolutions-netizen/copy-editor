@@ -238,3 +238,20 @@
   background: #f8fafc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
+
+/* AdSense unfilled state: Google sets display:none on unfilled units, so force the box to stay
+   visible with a dashed placeholder (covers SidebarAd's fallback, which shows the same label). */
+ins.adsbygoogle[data-ad-status="unfilled"] {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  background-color: #0f172a;
+  border: 1px dashed #334155;
+  border-radius: 8px;
+}
+
+ins.adsbygoogle[data-ad-status="unfilled"]::after {
+  content: "Advertisement · 300 × 250";
+  font-size: 11px;
+  color: #64748b;
+}

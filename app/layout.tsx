@@ -7,7 +7,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CreativeFlow — The All-in-One Visual Platform",
-  description: "Fast, browser-based photo editing, retouching, and export in one workspace.",
+  description:
+    "Fast, browser-based photo editing, retouching, and export in one workspace.",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -17,6 +18,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="en" className="h-full antialiased">
+      <head>
+        {/* Plain <script> in the server-rendered <head> (not next/script) so AdSense's site
+            verification crawler sees it in the raw HTML on every page. */}
+        <script
+          async
+          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID || "ca-pub-1985890330605429"}`}
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeRegistry initialMode={initialMode}>{children}</ThemeRegistry>
       </body>
