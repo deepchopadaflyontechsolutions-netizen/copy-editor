@@ -64,7 +64,6 @@ export default function SidebarAd({ adSlot }: { adSlot?: string }) {
         data-ad-slot={
           adSlot || process.env.NEXT_PUBLIC_ADSENSE_SLOT_ID || "2450680699"
         }
-        data-adtest="on"
       />
     </div>
   );
