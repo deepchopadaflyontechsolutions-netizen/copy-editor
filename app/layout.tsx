@@ -23,9 +23,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             verification crawler sees it in the raw HTML on every page. */}
         <script
           async
-          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID || "ca-pub-1985890330605429"}`}
-          crossOrigin="anonymous"
-        />
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1985890330605429"
+          crossorigin="anonymous"
+        ></script>
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeRegistry initialMode={initialMode}>{children}</ThemeRegistry>
